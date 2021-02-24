@@ -1,0 +1,13 @@
+pytorch_lightning==1.1.0
+hydra_core==1.0.4
+albumentations==0.5.2
+pandas==1.1.4
+scipy==1.5.4
+matplotlib==3.3.3
+seaborn==0.11.0
+scikit-learn==0.23.2
+jupyter==1.0.0
+jupyterlab==2.2.9
+opencv-python==4.4.0.46
+timm==0.3.3
+comet_ml==3.2.6

@@ -1,0 +1,7 @@
+input/*
+.idea/*
+hydra_output/*
+checkpoints/*
+*/__pycache__/*
+multirun/*
+weights/*
