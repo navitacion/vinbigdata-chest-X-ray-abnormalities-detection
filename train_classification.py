@@ -1,5 +1,6 @@
 import os
 import hydra
+from dotenv import load_dotenv
 from omegaconf import DictConfig
 from comet_ml import Experiment
 from sklearn.model_selection import StratifiedKFold
@@ -24,10 +25,14 @@ def main(cfg: DictConfig):
     data_dir = './input/resize_512'
     seed_everything(cfg.data.seed)
 
+    load_dotenv('.env')
+    comet_api_key = os.environ['COMET_ML_KEY']
+    comet_project_name = os.environ['COMET_ML_PROJECT_NAME']
+
     # Logging
     # Comet_ml
-    experiment = Experiment(api_key=cfg.comet_ml.api_key,
-                            project_name=cfg.comet_ml.project_name,
+    experiment = Experiment(api_key=comet_api_key,
+                            project_name=comet_project_name,
                             auto_param_logging=False,
                             auto_metric_logging=True,
                             auto_metric_step_rate=100)

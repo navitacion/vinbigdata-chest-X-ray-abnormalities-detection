@@ -70,10 +70,11 @@ class ChestXrayDataset(Dataset):
 
         # phase test  only image transform
         else:
+            width, height, _ = img.shape
             if self.transform is not None:
                 img = self.transform(img, phase=self.phase)
             else:
                 img = torch.from_numpy(img.transpose((2, 0, 1)))
                 img = img / 255.
 
-            return img, image_id
+            return img, image_id, (height, width)

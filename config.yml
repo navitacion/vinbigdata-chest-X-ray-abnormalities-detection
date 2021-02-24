@@ -2,10 +2,6 @@ hydra:
   run:
     dir: hydra_output/
 
-comet_ml:
-  api_key: LSTIie51umcysQtnef1Zzil6V
-  project_name: vinbigdata-chest-x-ray
-
 data:
   exp_name: test
   seed: 42
@@ -20,5 +16,4 @@ train:
   batch_size: 16
   num_workers: 8
   weight_decay: 1e-5
-  model_type: tf_efficientnet_b0_ns
-  scheduler: cosine
+  backbone: resnet50

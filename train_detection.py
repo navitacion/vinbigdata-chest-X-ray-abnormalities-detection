@@ -1,5 +1,6 @@
 import os
 import hydra
+from dotenv import load_dotenv
 from omegaconf import DictConfig
 from comet_ml import Experiment
 from sklearn.model_selection import StratifiedKFold
@@ -21,13 +22,17 @@ def main(cfg: DictConfig):
     cur_dir = hydra.utils.get_original_cwd()
     os.chdir(cur_dir)
     # Config  -------------------------------------------------------------------
-    data_dir = './input/resize_512'
+    data_dir = './input/original_png'
     seed_everything(cfg.data.seed)
+
+    load_dotenv('.env')
+    comet_api_key = os.environ['COMET_ML_KEY']
+    comet_project_name = os.environ['COMET_ML_PROJECT_NAME']
 
     # Logging
     # Comet_ml
-    experiment = Experiment(api_key=cfg.comet_ml.api_key,
-                            project_name=cfg.comet_ml.project_name,
+    experiment = Experiment(api_key=comet_api_key,
+                            project_name=comet_project_name,
                             auto_param_logging=False,
                             auto_metric_logging=True,
                             auto_metric_step_rate=100)
@@ -42,7 +47,7 @@ def main(cfg: DictConfig):
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='detection')
 
     # Model  -----------------------------------------------------------
-    net = get_faster_RCNN(model_name='resnet50', pretrained=True, num_classes=14)
+    net = get_faster_RCNN(model_name=cfg.train.backbone, pretrained=True, num_classes=14)
     # Log Model Graph
     experiment.set_model_graph(str(net))
 
@@ -52,7 +57,8 @@ def main(cfg: DictConfig):
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
 
     # Lightning Module
-    model = XrayLightningDetection(net, cfg, optimizer, scheduler, experiment=experiment)
+    model = XrayLightningDetection(net, cfg, optimizer, scheduler, experiment=experiment,
+                                   data_dir=data_dir, transform=transform)
 
     # Trainer  --------------------------------------------------------------------------
     trainer = Trainer(

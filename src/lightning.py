@@ -1,8 +1,10 @@
 import os
+import cv2
 import glob
 import itertools
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 import torch
 from torch.utils.data import DataLoader
@@ -11,6 +13,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import metrics
 
 from src.dataset import ChestXrayDataset
+from src.utils import display_bbox_image
 
 def collate_fn(batch):
     return tuple(zip(*batch))
@@ -75,7 +78,9 @@ class ChestXrayDataModule(pl.LightningDataModule):
             self.train_img_paths = [os.path.join(self.data_dir, 'train', f'{p}.png') for p in train_img_id]
             self.val_img_paths = [os.path.join(self.data_dir, 'train', f'{p}.png') for p in valid_img_id]
 
-        # Image path
+        # Test Image path
+        # original
+        p = './input/original_png/'
         self.test_img_paths = glob.glob(os.path.join(self.data_dir, 'test', '*.png'))
 
         # Dataset
@@ -237,7 +242,7 @@ class XrayLightningClassification(pl.LightningModule):
 
 
 class XrayLightningDetection(pl.LightningModule):
-    def __init__(self, net, cfg, optimizer, scheduler=None, experiment=None):
+    def __init__(self, net, cfg, optimizer, scheduler=None, experiment=None, data_dir=None, transform=None):
         """
         ------------------------------------
         Parameters
@@ -258,12 +263,45 @@ class XrayLightningDetection(pl.LightningModule):
         self.experiment = experiment
         self.optimizer = optimizer
         self.scheduler = scheduler
+        self.data_dir = data_dir
+        self.transform = transform
         self.best_loss = 1e+9
         self.best_acc = 0
         self.epoch_num = 0
-        self.acc_fn = metrics.Accuracy()
         self.train_step = 0
         self.valid_step = 0
+
+    def _display_bbox_image(self, target_image_id, axes):
+        # Ground Truth
+        img_path = os.path.join(self.data_dir, 'train', f'{target_image_id}.png')
+        train = pd.read_csv(os.path.join(self.data_dir, 'train.csv'))
+        bboxes = train[train['image_id'] == target_image_id][['x_min', 'y_min', 'x_max', 'y_max']].values
+        labels = train[train['image_id'] == target_image_id]['class_id'].values
+        img = cv2.imread(img_path)
+        height, width, _ = img.shape
+
+        display_bbox_image(img, bboxes, labels, ax=axes[0])
+        axes[0].set_title('Ground Truth')
+        axes[0].axis('off')
+        del train, bboxes, labels
+
+        # Prediction
+        self.net.eval()
+        transformed_img = self.transform(img, phase='test')
+        pred = self.net(transformed_img.cuda().unsqueeze(0))
+        bboxes = pred[0]['boxes'].data.cpu().numpy()
+        labels = pred[0]["labels"].data.cpu().numpy()
+        scores = pred[0]["scores"].data.cpu().numpy()
+
+        bboxes = bboxes[scores >= self.cfg.data.sub_th]
+        labels = labels[scores >= self.cfg.data.sub_th]
+
+        img = transformed_img.detach().permute(1, 2, 0).cpu().numpy()
+
+        display_bbox_image(img, bboxes, labels, ax=axes[1])
+        axes[1].set_title('Prediction')
+        axes[1].axis('off')
+
 
     def configure_optimizers(self):
         if self.scheduler is None:
@@ -301,25 +339,17 @@ class XrayLightningDetection(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         self.net.eval()
-        inp, image_id = batch
+        inp, image_id, shape = batch
         out = self.net(inp)
 
-        return {'outputs': out, 'image_id': image_id}
+        return {'outputs': out, 'image_id': image_id, 'height': shape[0], 'width': shape[1]}
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        loss_classifier = torch.stack([x['loss_classifier'] for x in outputs]).mean()
-        loss_box_reg = torch.stack([x['loss_box_reg'] for x in outputs]).mean()
-        loss_objectness = torch.stack([x['loss_objectness'] for x in outputs]).mean()
-        loss_rpn_box_reg = torch.stack([x['loss_rpn_box_reg'] for x in outputs]).mean()
+        logs = {'val/loss': avg_loss.item()}
 
-        logs = {
-            'val/loss': avg_loss.item(),
-            'val/loss_classifier': loss_classifier.item(),
-            'val/loss_box_reg': loss_box_reg.item(),
-            'val/loss_objectness': loss_objectness.item(),
-            'val/loss_rpn_box_reg': loss_rpn_box_reg.item()
-        }
+        for c in ['loss_classifier', 'loss_box_reg', 'loss_objectness', 'loss_rpn_box_reg']:
+            logs.update({f'val/{c}': torch.stack([x[c] for x in outputs]).mean().item()})
 
         # Logging
         if self.experiment is not None:
@@ -339,6 +369,19 @@ class XrayLightningDetection(pl.LightningModule):
                 self.experiment.log_model(name=filename, file_or_folder=filename)
                 os.remove(filename)
 
+        # Display Image
+        if self.data_dir is not None:
+            fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(16, 12))
+            target_image_id = '9a5094b2563a1ef3ff50dc5c7ff71345'
+
+            self._display_bbox_image(target_image_id, axes)
+            plt.tight_layout()
+
+            fig.savefig(f'Epoch_{self.current_epoch}.jpg')
+            self.experiment.log_image(f'Epoch_{self.current_epoch}.jpg', step=self.current_epoch)
+            os.remove(f'Epoch_{self.current_epoch}.jpg')
+
+
         return {'avg_val_loss': avg_loss}
 
 
@@ -349,24 +392,32 @@ class XrayLightningDetection(pl.LightningModule):
 
         for output in outputs:
             image_ids = output['image_id']
+            height = output['height']
+            width = output['width']
             out = output['outputs']
 
             for i in range(len(image_ids)):
                 image_id = image_ids[i]
-                boxes = out[i]["boxes"].data.cpu().numpy().astype(np.int32)
+                bboxes = out[i]["boxes"].data.cpu().numpy().astype(np.int32)
                 scores = out[i]["scores"].data.cpu().numpy()
                 labels = out[i]["labels"].data.cpu().numpy()
 
                 # score >= 0.5
-                boxes = boxes[scores >= self.cfg.data.sub_th]
+                bboxes = bboxes[scores >= self.cfg.data.sub_th]
                 labels = labels[scores >= self.cfg.data.sub_th]
                 scores = scores[scores >= self.cfg.data.sub_th]
 
+                # Transform original shape
+                bboxes = bboxes / self.cfg.data.img_size
+                bboxes = bboxes * np.array([width[i], height[i], width[i], height[i]])
+                bboxes = bboxes.astype(int)
+
+                # Get PredictionString
                 sub_text = ''
-                for j in range(boxes.shape[0]):
+                for j in range(bboxes.shape[0]):
                     sub_text += f'{labels[j]} '
                     sub_text += f'{scores[j]} '
-                    sub_text += ' '.join(map(str, list(boxes[j])))
+                    sub_text += ' '.join(map(str, list(bboxes[j])))
                     sub_text += ' '
 
                 if sub_text == '':

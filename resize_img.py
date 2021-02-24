@@ -8,13 +8,13 @@ from tqdm import tqdm
 import albumentations as albu
 
 
-train = pd.read_csv('./input/train.csv')
-train_img_paths = glob.glob(os.path.join('./input/train_png/*.png'))
-test_img_paths = glob.glob(os.path.join('./input/test_png/*.png'))
+train = pd.read_csv('./input/original_png/train.csv')
+train_img_paths = glob.glob(os.path.join('./input/original_png/train/*.png'))
+test_img_paths = glob.glob(os.path.join('./input/original_png/test/*.png'))
 
 resize = 512
-output_train_img_dir = f'./input/train_{resize}'
-output_test_img_dir = f'./input/test_{resize}'
+output_train_img_dir = f'./input/resize_{resize}/train'
+output_test_img_dir = f'./input/resize_{resize}/test'
 
 os.makedirs(output_train_img_dir, exist_ok=True)
 os.makedirs(output_test_img_dir, exist_ok=True)
@@ -29,6 +29,7 @@ print('Resize Train Images')
 for path in tqdm(train_img_paths):
     img = cv2.imread(path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    height, width, _ = img.shape
     image_id = os.path.basename(path).split('.')[0]
 
     extracted = train[train['image_id'] == image_id]
@@ -64,11 +65,15 @@ for path in tqdm(train_img_paths):
     img = Image.fromarray(img)
     img.save(os.path.join(output_train_img_dir, f'{image_id}.png'))
 
+    # Original image shape
+    res['height'] = height
+    res['width'] = width
+
     # Concat bbox
     all_res = pd.concat([all_res, res], axis=0, ignore_index=True)
 
 
-all_res.to_csv(f'./input/train_{resize}.csv', index=False)
+all_res.to_csv(f'./input/resize_{resize}/train.csv', index=False)
 
 
 print('Resize Test Images')
