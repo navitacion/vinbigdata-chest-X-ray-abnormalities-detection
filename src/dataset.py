@@ -38,8 +38,17 @@ class ChestXrayDataset(Dataset):
                 # Augmentations
                 img, bboxes, label = self.transform(img, bboxes, class_labels, self.phase)
 
-                bboxes = np.array(bboxes)
-                area = (bboxes[:, 3] - bboxes[:, 1]) * (bboxes[:, 2] - bboxes[:, 0])
+                # has bboxes
+                if len(bboxes) != 0:
+                    bboxes = np.array(bboxes)
+                    area = (bboxes[:, 3] - bboxes[:, 1]) * (bboxes[:, 2] - bboxes[:, 0])
+                # has no bboxes
+                else:
+                    bboxes = np.array([[0, 0, 1, 1]])
+                    area = [1]
+                    label = [14]
+
+
                 area = torch.as_tensor(area, dtype=torch.float32)
                 label = torch.tensor(label, dtype=torch.int64)
                 iscrowd = torch.zeros((target_df.shape[0], ), dtype=torch.int32)
@@ -50,9 +59,6 @@ class ChestXrayDataset(Dataset):
                 target['image_id'] = torch.tensor([idx])
                 target['area'] = area
                 target['iscrowd'] = iscrowd
-
-                # label -> (bbox, class_labels) (bn, 5)
-                # label = np.hstack((bboxes, np.expand_dims(label, axis=1)))
 
                 return img, target, image_id
 

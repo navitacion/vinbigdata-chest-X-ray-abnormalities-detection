@@ -363,7 +363,7 @@ class XrayLightningDetection(pl.LightningModule):
             self.experiment.log_parameters(logs)
 
             expname = self.cfg.data.exp_name
-            filename = f'{expname}_seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.epoch_num}_loss_{avg_loss.item():.3f}.pth'
+            filename = f'{expname}_seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.current_epoch}_loss_{avg_loss.item():.3f}.pth'
             torch.save(self.net.state_dict(), filename)
             if self.experiment is not None:
                 self.experiment.log_model(name=filename, file_or_folder=filename)
@@ -380,6 +380,8 @@ class XrayLightningDetection(pl.LightningModule):
             fig.savefig(f'Epoch_{self.current_epoch}.jpg')
             self.experiment.log_image(f'Epoch_{self.current_epoch}.jpg', step=self.current_epoch)
             os.remove(f'Epoch_{self.current_epoch}.jpg')
+            plt.clf()
+            plt.close()
 
 
         return {'avg_val_loss': avg_loss}
@@ -415,6 +417,9 @@ class XrayLightningDetection(pl.LightningModule):
                 # Get PredictionString
                 sub_text = ''
                 for j in range(bboxes.shape[0]):
+                    # class_id = 14 is NoData
+                    if labels[j] == 14:
+                        continue
                     sub_text += f'{labels[j]} '
                     sub_text += f'{scores[j]} '
                     sub_text += ' '.join(map(str, list(bboxes[j])))
@@ -435,3 +440,5 @@ class XrayLightningDetection(pl.LightningModule):
         self.sub.to_csv(filename, index=False)
         self.experiment.log_asset(file_data=filename, file_name=filename)
         os.remove(filename)
+
+        return None

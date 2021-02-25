@@ -22,25 +22,35 @@ class Timm_model(nn.Module):
         return self.base(x)
 
 
+# class Timm_model_featuremap(nn.Module):
+#     def __init__(self, model_name, pretrained=True, features_only=False):
+#         super(Timm_model_featuremap, self).__init__()
+#         self.base = create_model(model_name, pretrained=pretrained, features_only=features_only)
+#         # resnet50
+#         self.out_channels = 2048
+#
+#     def forward(self, x):
+#         return self.base(x)[-1]
+
 class Timm_model_featuremap(nn.Module):
     def __init__(self, model_name, pretrained=True, features_only=False):
         super(Timm_model_featuremap, self).__init__()
-        self.base = create_model(model_name, pretrained=pretrained, features_only=features_only)
+        self.base = create_model(model_name, pretrained=pretrained)
         # resnet50
         self.out_channels = 2048
 
     def forward(self, x):
-        return self.base(x)[-1]
+        return self.base.forward_features(x)
 
 
 # Ref: https://github.com/pytorch/vision/blob/10d5a55c332771164c13375f445331c52f8de6f1/torchvision/models/detection/faster_rcnn.py
 def get_faster_RCNN(model_name, pretrained=True, num_classes=14):
     backbone = Timm_model_featuremap(model_name, pretrained=pretrained, features_only=True)
 
-    anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),),
+    anchor_generator = AnchorGenerator(sizes=((8, 16, 32, 64, 128, 256, 512),),
                                        aspect_ratios=((0.5, 1.0, 2.0),))
 
-    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=['0'],
+    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=['0', '1', '2', '3'],
                                                     output_size=7,
                                                     sampling_ratio=2)
 

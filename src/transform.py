@@ -55,10 +55,10 @@ class ImageTransform_detection(BaseTransform):
         super(ImageTransform_detection, self).__init__()
         self.transform = {
             'train': albu.Compose([
-                albu.Resize(img_size, img_size),
+                albu.Resize(int(img_size*1.5), int(img_size*1.5)),
+                albu.RandomResizedCrop(img_size, img_size),
                 albu.HorizontalFlip(p=0.5),
                 albu.VerticalFlip(p=0.5),
-                albu.Transpose(p=0.5),
                 albu.Normalize(mean, std),
                 ToTensorV2(),
             ], p=1.0, bbox_params=albu.BboxParams(format='pascal_voc', label_fields=['class_labels'])),

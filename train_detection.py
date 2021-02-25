@@ -47,7 +47,7 @@ def main(cfg: DictConfig):
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='detection')
 
     # Model  -----------------------------------------------------------
-    net = get_faster_RCNN(model_name=cfg.train.backbone, pretrained=True, num_classes=14)
+    net = get_faster_RCNN(model_name=cfg.train.backbone, pretrained=True, num_classes=14 + 1)
     # Log Model Graph
     experiment.set_model_graph(str(net))
 

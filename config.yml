@@ -7,7 +7,7 @@ data:
   seed: 42
   img_size: 512
   n_splits: 5
-  sub_th: 0.5
+  sub_th: 0.2
 
 train:
   lr: 1e-4
