@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torchvision
 from torchvision.models.detection import FasterRCNN
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator
 from timm import create_model
 
@@ -22,35 +23,28 @@ class Timm_model(nn.Module):
         return self.base(x)
 
 
-# class Timm_model_featuremap(nn.Module):
-#     def __init__(self, model_name, pretrained=True, features_only=False):
-#         super(Timm_model_featuremap, self).__init__()
-#         self.base = create_model(model_name, pretrained=pretrained, features_only=features_only)
-#         # resnet50
-#         self.out_channels = 2048
-#
-#     def forward(self, x):
-#         return self.base(x)[-1]
 
+# Detection Model  -----------------------------------------------------------------
 class Timm_model_featuremap(nn.Module):
-    def __init__(self, model_name, pretrained=True, features_only=False):
+    def __init__(self, model_name, img_size, pretrained=True):
         super(Timm_model_featuremap, self).__init__()
         self.base = create_model(model_name, pretrained=pretrained)
-        # resnet50
-        self.out_channels = 2048
+        # Out Channels
+        z = torch.randn(2, 3, img_size, img_size)
+        self.out_channels = self.base.forward_features(z).size(1)
 
     def forward(self, x):
         return self.base.forward_features(x)
 
 
 # Ref: https://github.com/pytorch/vision/blob/10d5a55c332771164c13375f445331c52f8de6f1/torchvision/models/detection/faster_rcnn.py
-def get_faster_RCNN(model_name, pretrained=True, num_classes=14):
-    backbone = Timm_model_featuremap(model_name, pretrained=pretrained, features_only=True)
+def get_faster_RCNN(model_name, pretrained=True, num_classes=14, img_size=512):
+    backbone = Timm_model_featuremap(model_name, img_size, pretrained=pretrained)
 
-    anchor_generator = AnchorGenerator(sizes=((8, 16, 32, 64, 128, 256, 512),),
-                                       aspect_ratios=((0.5, 1.0, 2.0),))
+    anchor_generator = AnchorGenerator(sizes=((8, 8, 16, 16, 32, 32, 64, 64, 128, 128, 256, 512),),
+                                       aspect_ratios=((0.2, 0.5, 0.7, 1.0, 1.5, 2.0),))
 
-    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=['0', '1', '2', '3'],
+    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=['0'],
                                                     output_size=7,
                                                     sampling_ratio=2)
 
@@ -63,20 +57,26 @@ def get_faster_RCNN(model_name, pretrained=True, num_classes=14):
     return model
 
 
+# Pretrained on COCO
+# Based on Resnet50
+def get_original_faster_RCNN(num_classes=14,  pretrained=True):
+    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=pretrained)####True
+
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+    return model
+
 
 
 if __name__ == '__main__':
-    net = create_model('tf_efficientnet_b4_ns', pretrained=True, features_only=True)
+    net = create_model('tf_efficientnet_b0_ns', pretrained=False)
 
-    z = torch.randn(4, 3, 224, 224)
+    z = torch.randn(4, 3, 512, 512)
 
-    out = net(z)[-1]
+    out = net.forward_features(z)
     print(out.size())
+    print(out.size(1))
 
-    backbone = torchvision.models.mobilenet_v2(pretrained=True).features
-    out = backbone(z)
-    print(out.size())
-
-    print(net)
     # print('#'*30)
     # print(backbone)

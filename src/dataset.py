@@ -35,6 +35,10 @@ class ChestXrayDataset(Dataset):
                 # class_labels
                 class_labels = target_df['class_id'].values.tolist()
 
+                print(bboxes)
+                print(len(bboxes))
+                print(list(map(int, bboxes[0])))
+
                 # Augmentations
                 img, bboxes, label = self.transform(img, bboxes, class_labels, self.phase)
 
@@ -48,17 +52,12 @@ class ChestXrayDataset(Dataset):
                     area = [1]
                     label = [14]
 
-
-                area = torch.as_tensor(area, dtype=torch.float32)
-                label = torch.tensor(label, dtype=torch.int64)
-                iscrowd = torch.zeros((target_df.shape[0], ), dtype=torch.int32)
-
                 target = {}
                 target['boxes'] = torch.from_numpy(bboxes)
-                target['labels'] = label
+                target['labels'] = torch.tensor(label, dtype=torch.int64)
                 target['image_id'] = torch.tensor([idx])
-                target['area'] = area
-                target['iscrowd'] = iscrowd
+                target['area'] = torch.as_tensor(area, dtype=torch.float32)
+                target['iscrowd'] = torch.zeros((target_df.shape[0], ), dtype=torch.int64)
 
                 return img, target, image_id
 

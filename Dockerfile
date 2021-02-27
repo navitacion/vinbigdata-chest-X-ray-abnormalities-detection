@@ -17,3 +17,5 @@ RUN apt update && apt -y upgrade && apt install -y \
   libgl1-mesa-dev
 
 RUN pip install --upgrade pip && pip install -r requirements.txt
+
+RUN python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'

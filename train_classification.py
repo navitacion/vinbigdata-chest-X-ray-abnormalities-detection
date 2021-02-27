@@ -42,7 +42,7 @@ def main(cfg: DictConfig):
     experiment.log_parameters(dict(cfg.train))
 
     # Data Module  -------------------------------------------------------------------
-    transform = ImageTransform_classification()
+    transform = ImageTransform_classification(img_size=cfg.data.img_size)
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='classification')
 

@@ -24,54 +24,38 @@ class BaseTransform(metaclass=ABCMeta):
 
 
 class ImageTransform_classification(BaseTransform):
-    def __init__(self, img_size=224, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    def __init__(self, cfg):
         super(ImageTransform_classification, self).__init__()
+
+        transform_train_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_train).items()]
+        transform_train_list.append(ToTensorV2())
+        transform_val_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_val).items()]
+        transform_val_list.append(ToTensorV2())
+        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_test).items()]
+        transform_test_list.append(ToTensorV2())
+
         self.transform = {
-            'train': albu.Compose([
-                albu.Resize(img_size, img_size),
-                albu.HorizontalFlip(p=0.5),
-                albu.VerticalFlip(p=0.5),
-                albu.Transpose(p=0.5),
-                albu.Normalize(mean, std),
-                ToTensorV2(),
-            ], p=1.0),
-
-            'val': albu.Compose([
-                albu.Resize(img_size, img_size),
-                albu.Normalize(mean, std),
-                ToTensorV2(),
-            ], p=1.0),
-
-            'test': albu.Compose([
-                albu.Resize(img_size, img_size),
-                albu.Normalize(mean, std),
-                ToTensorV2(),
-            ], p=1.0)
+            'train': albu.Compose(transform_train_list, p=1.0),
+            'val': albu.Compose(transform_val_list, p=1.0),
+            'test': albu.Compose(transform_test_list, p=1.0)
         }
 
 
 class ImageTransform_detection(BaseTransform):
-    def __init__(self, img_size=224, mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225)):
+    def __init__(self, cfg):
         super(ImageTransform_detection, self).__init__()
+
+        transform_train_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_train).items()]
+        transform_train_list.append(ToTensorV2())
+        transform_val_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_val).items()]
+        transform_val_list.append(ToTensorV2())
+        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_test).items()]
+        transform_test_list.append(ToTensorV2())
+
+        bbox_params = albu.BboxParams(format='pascal_voc', min_visibility=0.2, label_fields=['class_labels'])
+
         self.transform = {
-            'train': albu.Compose([
-                albu.Resize(int(img_size*1.5), int(img_size*1.5)),
-                albu.RandomResizedCrop(img_size, img_size),
-                albu.HorizontalFlip(p=0.5),
-                albu.VerticalFlip(p=0.5),
-                albu.Normalize(mean, std),
-                ToTensorV2(),
-            ], p=1.0, bbox_params=albu.BboxParams(format='pascal_voc', label_fields=['class_labels'])),
-
-            'val': albu.Compose([
-                albu.Resize(img_size, img_size),
-                albu.Normalize(mean, std),
-                ToTensorV2(),
-            ], p=1.0, bbox_params=albu.BboxParams(format='pascal_voc', label_fields=['class_labels'])),
-
-            'test': albu.Compose([
-                albu.Resize(img_size, img_size),
-                albu.Normalize(mean, std),
-                ToTensorV2(),
-            ], p=1.0)
+            'train': albu.Compose(transform_train_list, p=1.0, bbox_params=bbox_params),
+            'val': albu.Compose(transform_val_list, p=1.0, bbox_params=bbox_params),
+            'test': albu.Compose(transform_test_list, p=1.0)
         }

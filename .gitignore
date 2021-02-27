@@ -1,6 +1,7 @@
 input/*
 .idea/*
 hydra_output/*
+detectron2_output/*
 .env
 checkpoints/*
 */__pycache__/*

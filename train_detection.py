@@ -13,10 +13,10 @@ from pytorch_lightning import Trainer
 from src.utils import seed_everything
 from src.transform import ImageTransform_classification, ImageTransform_detection
 from src.lightning import ChestXrayDataModule, XrayLightningDetection
-from src.model import get_faster_RCNN
+from src.model import get_faster_RCNN, get_original_faster_RCNN
 
 
-@hydra.main('config.yml')
+@hydra.main(config_name = "config")
 def main(cfg: DictConfig):
     print('VinBigData Training Objective Detection')
     cur_dir = hydra.utils.get_original_cwd()
@@ -40,14 +40,17 @@ def main(cfg: DictConfig):
     # Log Parameters
     experiment.log_parameters(dict(cfg.data))
     experiment.log_parameters(dict(cfg.train))
+    experiment.log_parameters(dict(cfg.aug_kwargs))
 
     # Data Module  -------------------------------------------------------------------
-    transform = ImageTransform_detection()
+    transform = ImageTransform_detection(cfg)
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='detection')
 
     # Model  -----------------------------------------------------------
-    net = get_faster_RCNN(model_name=cfg.train.backbone, pretrained=True, num_classes=14 + 1)
+    net = get_faster_RCNN(model_name=cfg.train.backbone, img_size=cfg.data.img_size,
+                          pretrained=True, num_classes=14 + 1)
+    # net = get_original_faster_RCNN(num_classes=14 + 1, pretrained=True)
     # Log Model Graph
     experiment.set_model_graph(str(net))
 
@@ -66,8 +69,8 @@ def main(cfg: DictConfig):
         max_epochs=cfg.train.epoch,
         gpus=-1,
         num_sanity_val_steps=0,
-        amp_level='O2',
-        amp_backend='apex'
+        # amp_level='O2',
+        # amp_backend='apex'
     )
 
     # Train

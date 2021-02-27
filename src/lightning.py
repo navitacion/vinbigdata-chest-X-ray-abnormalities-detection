@@ -13,7 +13,7 @@ import pytorch_lightning as pl
 from pytorch_lightning import metrics
 
 from src.dataset import ChestXrayDataset
-from src.utils import display_bbox_image
+from src.utils import display_bbox_image, get_bbox_image
 
 def collate_fn(batch):
     return tuple(zip(*batch))
@@ -40,6 +40,10 @@ class ChestXrayDataModule(pl.LightningDataModule):
         self.df['y_min'] = self.df['y_min'].fillna(0)
         self.df['x_max'] = self.df['x_max'].fillna(1)
         self.df['y_max'] = self.df['y_max'].fillna(1)
+
+        # Extract rad id
+        if self.cfg.data.rad_id != 'all':
+            self.df = self.df[self.df['rad_id'].isin(self.cfg.data.rad_id)].reset_index()
 
         self.df['is_anomary'] = self.df['class_id'].apply(lambda x: 1 if x == 14 else 0)
         if self.sample:
@@ -80,7 +84,6 @@ class ChestXrayDataModule(pl.LightningDataModule):
 
         # Test Image path
         # original
-        p = './input/original_png/'
         self.test_img_paths = glob.glob(os.path.join(self.data_dir, 'test', '*.png'))
 
         # Dataset
@@ -210,18 +213,12 @@ class XrayLightningClassification(pl.LightningModule):
             self.experiment.log_metrics(logs, epoch=self.current_epoch)
 
         # Save Weights
-        if self.best_loss > avg_loss or self.best_acc < acc:
-            self.best_loss = min(avg_loss.item(), self.best_loss)
-            self.best_acc = max(acc.item(), self.best_acc)
-            logs = {'val/best_loss': self.best_loss, 'val/best_acc': self.best_acc}
-            self.experiment.log_parameters(logs)
-
-            expname = self.cfg.data.exp_name
-            filename = f'{expname}_seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.epoch_num}_loss_{avg_loss.item():.3f}_acc_{acc.item():.3f}.pth'
-            torch.save(self.net.state_dict(), filename)
-            if self.experiment is not None:
-                self.experiment.log_model(name=filename, file_or_folder=filename)
-                os.remove(filename)
+        expname = self.cfg.data.exp_name
+        filename = f'{expname}_seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.epoch_num}_loss_{avg_loss.item():.3f}_acc_{acc.item():.3f}.pth'
+        torch.save(self.net.state_dict(), filename)
+        if self.experiment is not None:
+            self.experiment.log_model(name=filename, file_or_folder=filename)
+            os.remove(filename)
 
         return {'avg_val_loss': avg_loss}
 
@@ -296,11 +293,15 @@ class XrayLightningDetection(pl.LightningModule):
         bboxes = bboxes[scores >= self.cfg.data.sub_th]
         labels = labels[scores >= self.cfg.data.sub_th]
 
-        img = transformed_img.detach().permute(1, 2, 0).cpu().numpy()
+        bboxes = bboxes / self.cfg.data.img_size
+        bboxes = bboxes * np.array([width, height, width, height])
+        bboxes = bboxes.astype(int)
 
         display_bbox_image(img, bboxes, labels, ax=axes[1])
         axes[1].set_title('Prediction')
         axes[1].axis('off')
+
+        del bboxes, labels
 
 
     def configure_optimizers(self):
@@ -371,7 +372,7 @@ class XrayLightningDetection(pl.LightningModule):
 
         # Display Image
         if self.data_dir is not None:
-            fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(16, 12))
+            fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(28, 18))
             target_image_id = '9a5094b2563a1ef3ff50dc5c7ff71345'
 
             self._display_bbox_image(target_image_id, axes)

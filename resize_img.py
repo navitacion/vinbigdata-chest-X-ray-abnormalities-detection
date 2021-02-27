@@ -77,9 +77,13 @@ all_res.to_csv(f'./input/resize_{resize}/train.csv', index=False)
 
 
 print('Resize Test Images')
+img_id_list = []
+height_list = []
+width_list = []
 # Test Image
 for path in tqdm(test_img_paths):
     img = cv2.imread(path)
+    height, width = img.shape[:2]
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     image_id = os.path.basename(path).split('.')[0]
 
@@ -90,3 +94,15 @@ for path in tqdm(test_img_paths):
     # Save Image
     img = Image.fromarray(img)
     img.save(os.path.join(output_test_img_dir, f'{image_id}.png'))
+
+    img_id_list.append(image_id)
+    height_list.append(height)
+    width_list.append(width)
+
+all_res = pd.DataFrame({
+    'image_id': img_id_list,
+    'height': height_list,
+    'width': width_list
+})
+
+all_res.to_csv(f'./input/resize_{resize}/test_image_info.csv', index=False)
