@@ -65,7 +65,7 @@ def main(cfg: DictConfig):
         class_name_dict.update({14: 'No finding'})
 
     # Register Dataset  --------------------------------------------------
-    DatasetCatalog.register("xray_train", lambda d='train': get_xray_dict(data_dir))
+    DatasetCatalog.register("xray_train", lambda d='train': get_xray_dict(data_dir, use_class14=use_class14))
     DatasetCatalog.register("xray_test", lambda d='test': get_test_xray_dict(data_dir))
     MetadataCatalog.get("xray_train").set(thing_classes=list(class_name_dict.values()))
     MetadataCatalog.get("xray_test").set(thing_classes=list(class_name_dict.values()))
