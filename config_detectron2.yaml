@@ -1,0 +1,25 @@
+hydra:
+  run:
+    dir: hydra_output/
+
+
+data:
+  data_dir: ./input/resize_512
+  output_dir: ./detectron2_output/exp01
+  img_size: 512
+  # Ref: https://github.com/facebookresearch/detectron2/blob/master/detectron2/model_zoo/model_zoo.py
+  backbone: COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml
+  use_class14: True
+  seed: 42
+
+
+train:
+  lr: 0.001
+  max_iter: 10000
+  num_workers: 8
+  batch_size_per_image: 512
+  ims_per_batch: 2
+  random_flip: horizontal
+
+predict:
+  score_th: 0.5

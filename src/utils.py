@@ -42,6 +42,8 @@ def display_bbox_image(img, bboxes, labels, ax):
 
     # bbox
     for xy, label in zip(bboxes, labels):
+        if label == 14:
+            continue
         x_min, y_min, x_max, y_max = map(int, xy)
         box = patches.Rectangle(xy=(x_min, y_min), width=x_max - x_min, height=y_max - y_min, ec='r', fill=False)
         ax.add_patch(box)

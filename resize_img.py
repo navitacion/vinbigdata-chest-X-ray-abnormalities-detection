@@ -12,7 +12,7 @@ train = pd.read_csv('./input/original_png/train.csv')
 train_img_paths = glob.glob(os.path.join('./input/original_png/train/*.png'))
 test_img_paths = glob.glob(os.path.join('./input/original_png/test/*.png'))
 
-resize = 512
+resize = 256
 output_train_img_dir = f'./input/resize_{resize}/train'
 output_test_img_dir = f'./input/resize_{resize}/test'
 
