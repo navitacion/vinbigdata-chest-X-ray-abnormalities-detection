@@ -16,13 +16,13 @@ from src.lightning import ChestXrayDataModule, XrayLightningClassification
 from src.model import Timm_model
 
 
-@hydra.main('config.yml')
+@hydra.main(config_name = "config.yaml")
 def main(cfg: DictConfig):
     print('VinBigData Training Classification')
     cur_dir = hydra.utils.get_original_cwd()
     os.chdir(cur_dir)
     # Config  -------------------------------------------------------------------
-    data_dir = './input/resize_512'
+    data_dir = './input/resize_1024'
     seed_everything(cfg.data.seed)
 
     load_dotenv('.env')
@@ -40,14 +40,15 @@ def main(cfg: DictConfig):
     # Log Parameters
     experiment.log_parameters(dict(cfg.data))
     experiment.log_parameters(dict(cfg.train))
+    experiment.log_parameters(dict(cfg.aug_kwargs_classification))
 
     # Data Module  -------------------------------------------------------------------
-    transform = ImageTransform_classification(img_size=cfg.data.img_size)
+    transform = ImageTransform_classification(cfg)
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='classification')
 
     # Model  -----------------------------------------------------------
-    net = Timm_model(cfg.train.model_type, out_dim=2)
+    net = Timm_model(cfg.train.backbone, out_dim=2)
     # Log Model Graph
     experiment.set_model_graph(str(net))
 

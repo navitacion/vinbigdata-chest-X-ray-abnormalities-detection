@@ -194,7 +194,7 @@ class XrayLightningClassification(pl.LightningModule):
         inp, image_id = batch
         inp = inp.type(torch.float32)
         out = self.forward(inp)
-        logits = F.sigmoid(out)
+        logits = torch.softmax(out, dim=1)
 
         return {'preds': logits, 'image_id': image_id}
 
@@ -213,8 +213,7 @@ class XrayLightningClassification(pl.LightningModule):
             self.experiment.log_metrics(logs, epoch=self.current_epoch)
 
         # Save Weights
-        expname = self.cfg.data.exp_name
-        filename = f'{expname}_seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.epoch_num}_loss_{avg_loss.item():.3f}_acc_{acc.item():.3f}.pth'
+        filename = f'{self.cfg.train.backbone}-seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_ims_{self.cfg.data.img_size}_epoch_{self.current_epoch}_loss_{avg_loss.item():.3f}_acc_{acc.item():.3f}.pth'
         torch.save(self.net.state_dict(), filename)
         if self.experiment is not None:
             self.experiment.log_model(name=filename, file_or_folder=filename)
@@ -363,8 +362,7 @@ class XrayLightningDetection(pl.LightningModule):
             logs = {'val/best_loss': self.best_loss}
             self.experiment.log_parameters(logs)
 
-            expname = self.cfg.data.exp_name
-            filename = f'{expname}_seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.current_epoch}_loss_{avg_loss.item():.3f}.pth'
+            filename = f'{self.cfg.train.backbone}-seed_{self.cfg.data.seed}_fold_{self.cfg.train.fold}_epoch_{self.current_epoch}_loss_{avg_loss.item():.3f}.pth'
             torch.save(self.net.state_dict(), filename)
             if self.experiment is not None:
                 self.experiment.log_model(name=filename, file_or_folder=filename)

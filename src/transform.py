@@ -27,11 +27,11 @@ class ImageTransform_classification(BaseTransform):
     def __init__(self, cfg):
         super(ImageTransform_classification, self).__init__()
 
-        transform_train_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_train).items()]
+        transform_train_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_classification.aug_train).items()]
         transform_train_list.append(ToTensorV2())
-        transform_val_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_val).items()]
+        transform_val_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_classification.aug_val).items()]
         transform_val_list.append(ToTensorV2())
-        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_test).items()]
+        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_classification.aug_test).items()]
         transform_test_list.append(ToTensorV2())
 
         self.transform = {
@@ -41,15 +41,27 @@ class ImageTransform_classification(BaseTransform):
         }
 
 
+class ImageTransform_classification_test(BaseTransform):
+    def __init__(self, cfg):
+        super(ImageTransform_classification_test, self).__init__()
+
+        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_classification.aug_test).items()]
+        transform_test_list.append(ToTensorV2())
+
+        self.transform = {
+            'test': albu.Compose(transform_test_list, p=1.0)
+        }
+
+
 class ImageTransform_detection(BaseTransform):
     def __init__(self, cfg):
         super(ImageTransform_detection, self).__init__()
 
-        transform_train_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_train).items()]
+        transform_train_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_detection.aug_train).items()]
         transform_train_list.append(ToTensorV2())
-        transform_val_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_val).items()]
+        transform_val_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_detection.aug_val).items()]
         transform_val_list.append(ToTensorV2())
-        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs.aug_test).items()]
+        transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_detection.aug_test).items()]
         transform_test_list.append(ToTensorV2())
 
         bbox_params = albu.BboxParams(format='pascal_voc', min_visibility=0.2, label_fields=['class_labels'])

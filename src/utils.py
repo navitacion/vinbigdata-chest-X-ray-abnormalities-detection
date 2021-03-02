@@ -2,6 +2,7 @@ import os
 import cv2
 import glob
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import random
@@ -72,3 +73,32 @@ def get_bbox_image(img, bboxes, labels):
             lineType=cv2.LINE_AA,
         )
     return img
+
+
+def visualize(target_image_ids, data_dir, output_dir, experiment, predictor):
+    for target_image_id in target_image_ids:
+        fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(28, 18))
+        # Ground Truth
+        img = cv2.imread(os.path.join(data_dir, 'train', f'{target_image_id}.png'))
+        train = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+        bboxes = train[train['image_id'] == target_image_id][['x_min', 'y_min', 'x_max', 'y_max']].values
+        labels = train[train['image_id'] == target_image_id]['class_id'].values
+        display_bbox_image(img, bboxes, labels, ax=axes[0])
+        axes[0].set_title('Ground Truth')
+        axes[0].axis('off')
+
+        # Predict
+        outputs = predictor(img)
+        fields = outputs['instances'].get_fields()
+        bboxes = fields['pred_boxes'].tensor.detach().cpu().numpy()
+        labels = fields['pred_classes'].detach().cpu().numpy()
+        display_bbox_image(img, bboxes, labels, ax=axes[1])
+        axes[1].set_title('Predict')
+        axes[1].axis('off')
+
+        plt.tight_layout()
+
+        filename = os.path.join(output_dir, f'result_{target_image_id}.jpg')
+        fig.savefig(filename)
+        experiment.log_image(filename)
+        os.remove(filename)

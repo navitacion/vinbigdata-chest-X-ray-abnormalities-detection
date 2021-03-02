@@ -1,19 +1,18 @@
-import os, glob, hydra, random, cv2, shutil
-from tqdm import tqdm
+import os, glob, hydra, cv2, shutil
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 from comet_ml import Experiment
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 from detectron2 import model_zoo
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2.data import MetadataCatalog, DatasetCatalog
+from detectron2.config.config import CfgNode as CN
 
-from src.detectron2_helper import get_xray_dict, get_test_xray_dict, get_submission
-from src.utils import seed_everything, display_bbox_image
+from src.detectron2.helper import get_xray_dict, get_test_xray_dict, get_submission
+from src.detectron2.trainer import MyTrainer
+from src.utils import seed_everything
+from src.utils import visualize
 
 @hydra.main(config_name = "config_detectron2")
 def main(cfg: DictConfig):
@@ -36,6 +35,12 @@ def main(cfg: DictConfig):
     # Log Parameters
     experiment.log_parameters(dict(cfg.data))
     experiment.log_parameters(dict(cfg.train))
+    experiment.log_parameters(dict(cfg.aug_kwargs_detection))
+    experiment.log_parameters(dict(cfg.classification_kwargs))
+
+    # omegaconf -> dict
+    rep_aug_kwargs = dict(cfg.aug_kwargs_detection)
+    rep_aug_kwargs = {k: dict(v) for k, v in rep_aug_kwargs.items()}
 
     class_name_dict = {
         0: 'Aortic enlargement',
@@ -65,35 +70,35 @@ def main(cfg: DictConfig):
         class_name_dict.update({14: 'No finding'})
 
     # Register Dataset  --------------------------------------------------
-    DatasetCatalog.register("xray_train", lambda d='train': get_xray_dict(data_dir, use_class14=use_class14))
+    DatasetCatalog.register("xray_train", lambda d='train': get_xray_dict(data_dir, cfg))
     DatasetCatalog.register("xray_test", lambda d='test': get_test_xray_dict(data_dir))
     MetadataCatalog.get("xray_train").set(thing_classes=list(class_name_dict.values()))
     MetadataCatalog.get("xray_test").set(thing_classes=list(class_name_dict.values()))
 
     # Config  --------------------------------------------------
     detectron2_cfg = get_cfg()
+    detectron2_cfg.aug_kwargs = CN(rep_aug_kwargs)
     detectron2_cfg.merge_from_file(model_zoo.get_config_file(backbone))
     detectron2_cfg.DATASETS.TRAIN = ("xray_train",)
     detectron2_cfg.DATASETS.TEST = ()
     detectron2_cfg.INPUT.MIN_SIZE_TRAIN = (img_size,)
     detectron2_cfg.INPUT.MAX_SIZE_TRAIN = img_size
-    detectron2_cfg.INPUT.RANDOM_FLIP = cfg.train.random_flip
     detectron2_cfg.DATALOADER.NUM_WORKERS = cfg.train.num_workers
-    detectron2_cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(backbone)  # Let training initialize from model zoo
+    detectron2_cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(backbone)
     detectron2_cfg.SOLVER.IMS_PER_BATCH = cfg.train.ims_per_batch
-    detectron2_cfg.SOLVER.BASE_LR = cfg.train.lr  # pick a good LR
-    detectron2_cfg.SOLVER.MAX_ITER = cfg.train.max_iter    # 300 iterations seems good enough for this toy dataset; you will need to train longer for a practical dataset
+    detectron2_cfg.SOLVER.BASE_LR = cfg.train.lr
+    detectron2_cfg.SOLVER.MAX_ITER = cfg.train.max_iter
     detectron2_cfg.SOLVER.LR_SCHEDULER_NAME = "WarmupCosineLR"
     detectron2_cfg.SOLVER.CHECKPOINT_PERIOD = 1000
-    detectron2_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = cfg.train.batch_size_per_image   # faster, and good enough for this toy dataset (default: 512)
-    detectron2_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 15 if use_class14 else 14  # only has one class (ballon). (see https://detectron2.readthedocs.io/tutorials/datasets.html#update-the-config-for-new-datasets)
-    # NOTE: this config means the number of classes, but a few popular unofficial tutorials incorrect uses num_classes+1 here.
+    detectron2_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = cfg.train.batch_size_per_image
+    detectron2_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 15 if use_class14 else 14
     detectron2_cfg.OUTPUT_DIR = output_dir
     detectron2_cfg.SEED = cfg.data.seed
 
     # Train  --------------------------------------------------
     os.makedirs(detectron2_cfg.OUTPUT_DIR, exist_ok=True)
-    trainer = DefaultTrainer(detectron2_cfg)
+    # trainer = DefaultTrainer(detectron2_cfg)
+    trainer = MyTrainer(detectron2_cfg)
     trainer.resume_or_load(resume=True)
     trainer.train()
 
@@ -109,7 +114,7 @@ def main(cfg: DictConfig):
     detectron2_cfg.merge_from_file(model_zoo.get_config_file(backbone))
     detectron2_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 15 if use_class14 else 14
     detectron2_cfg.MODEL.WEIGHTS = os.path.join(output_dir, model_name)  # path to the model we just trained
-    detectron2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = cfg.predict.score_th   # set a custom testing threshold
+    detectron2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = cfg.data.score_th   # set a custom testing threshold
 
     predictor = DefaultPredictor(detectron2_cfg)
     dataset_dicts = get_test_xray_dict(data_dir)
@@ -120,38 +125,10 @@ def main(cfg: DictConfig):
                         '001d127bad87592efe45a5c7678f8b8d',
                         '008b3176a7248a0a189b5731ac8d2e95']
 
-    for target_image_id in target_image_ids:
-        fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(28, 18))
-        # Ground Truth
-        img = cv2.imread(os.path.join(data_dir, 'train', f'{target_image_id}.png'))
-        train = pd.read_csv(os.path.join(data_dir, 'train.csv'))
-        bboxes = train[train['image_id'] == target_image_id][['x_min', 'y_min', 'x_max', 'y_max']].values
-        labels = train[train['image_id'] == target_image_id]['class_id'].values
-        display_bbox_image(img, bboxes, labels, ax=axes[0])
-        axes[0].set_title('Ground Truth')
-        axes[0].axis('off')
-
-        # Predict
-        outputs = predictor(img)
-        fields = outputs['instances'].get_fields()
-        bboxes = fields['pred_boxes'].tensor.detach().cpu().numpy()
-        labels = fields['pred_classes'].detach().cpu().numpy()
-        display_bbox_image(img, bboxes, labels, ax=axes[1])
-        axes[1].set_title('Predict')
-        axes[1].axis('off')
-
-        plt.tight_layout()
-
-        filename = os.path.join(output_dir, f'result_{target_image_id}.jpg')
-        fig.savefig(filename)
-        experiment.log_image(filename)
-        os.remove(filename)
-
+    visualize(target_image_ids, data_dir, output_dir, experiment, predictor)
 
     # Inference  ------------------------------------------------------
-    test_img_info_df = pd.read_csv(os.path.join(data_dir, 'test_image_info.csv'))
-
-    sub = get_submission(dataset_dicts, test_img_info_df, predictor, img_size)
+    sub = get_submission(dataset_dicts, cfg, experiment, predictor)
 
     filename = os.path.join(output_dir, 'submission.csv')
     sub.to_csv(filename, index=False)

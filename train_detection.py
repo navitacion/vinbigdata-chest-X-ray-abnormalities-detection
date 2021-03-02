@@ -40,7 +40,7 @@ def main(cfg: DictConfig):
     # Log Parameters
     experiment.log_parameters(dict(cfg.data))
     experiment.log_parameters(dict(cfg.train))
-    experiment.log_parameters(dict(cfg.aug_kwargs))
+    experiment.log_parameters(dict(cfg.aug_kwargs_detection))
 
     # Data Module  -------------------------------------------------------------------
     transform = ImageTransform_detection(cfg)
