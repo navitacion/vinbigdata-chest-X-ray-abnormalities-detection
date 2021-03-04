@@ -5,7 +5,7 @@ hydra:
 data:
   exp_name: test
   seed: 42
-  img_size: &image_size 512
+  img_size: &image_size 1024
   n_splits: 5
   sub_th: 0.2
   rad_id: all  # Default: all  ex. R9, R10, R11   Set List

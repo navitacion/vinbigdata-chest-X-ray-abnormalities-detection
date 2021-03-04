@@ -3,9 +3,9 @@ hydra:
     dir: hydra_output/
 
 data:
-  data_dir: ./input/original_png
+  data_dir: ./input/resize_1024
   output_dir: ./detectron2_output/exp01
-  img_size: &image_size 512
+  img_size: &image_size 1024
   # Ref: https://github.com/facebookresearch/detectron2/blob/master/detectron2/model_zoo/model_zoo.py
   backbone: COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml
   use_class14: False
@@ -22,12 +22,13 @@ classification_kwargs:
 train:
   lr: 0.001
   max_iter: 10000
-  num_workers: 8
+  num_workers: 4
   batch_size_per_image: 512
   ims_per_batch: 2
 
 aug_kwargs_detection:
   Resize: { "height": *image_size, "width": *image_size }
+  CLAHE : {"clip_limit": 4.0, "p": 0.5}
   HorizontalFlip: {"p": 0.5}
   VerticalFlip: {"p": 0.5}
   ShiftScaleRotate: {"scale_limit": 0.15, "rotate_limit": 10, "p": 0.5}

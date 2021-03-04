@@ -68,7 +68,7 @@ class ChestXrayDataModule(pl.LightningDataModule):
         if self.data_type == 'classification':
             for i, (trn_idx, val_idx) in enumerate(self.cv.split(df, df[target_col])):
                 df.loc[val_idx, 'fold'] = i
-            fold = 0
+            fold = self.cfg.train.fold
             train = df[df['fold'] != fold].reset_index(drop=True)
             val = df[df['fold'] == fold].reset_index(drop=True)
             self.train_img_paths = [os.path.join(self.data_dir, 'train', f'{p}.png') for p in train['image_id']]

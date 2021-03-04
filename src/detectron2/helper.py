@@ -16,55 +16,52 @@ from src.transform import ImageTransform_classification_test
 from src.model import Timm_model
 
 
+def get_record(img_id, idx, df, data_dir, cfg):
+    record = {}
 
-def get_xray_dict(data_dir, cfg):
-    anno_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+    img_path = os.path.join(data_dir, 'train', f'{img_id}.png')
+    height, width = cv2.imread(img_path).shape[:2]
 
+    record['file_name'] = img_path
+    record['image_id'] = idx
+    record['height'] = height
+    record['width'] = width
+
+    target_df = df[df['image_id'] == img_id]
+    # bboxes
     if cfg.data.use_class14:
-        pass
+        bboxes = target_df[['x_min', 'y_min', 'x_max', 'y_max']]
+        bboxes['x_min'] = bboxes['x_min'].fillna(0)
+        bboxes['y_min'] = bboxes['y_min'].fillna(0)
+        bboxes['x_max'] = bboxes['x_max'].fillna(width)
+        bboxes['y_max'] = bboxes['y_max'].fillna(height)
+        bboxes = bboxes.values.tolist()
     else:
-        anno_df = anno_df[anno_df['class_id'] != 14].reset_index(drop=True)
+        bboxes = target_df[['x_min', 'y_min', 'x_max', 'y_max']].values.tolist()
+    # class_labels
+    class_labels = target_df['class_id'].values.tolist()
 
-    # Extract rad id
-    if cfg.data.rad_id != 'all':
-        anno_df = anno_df[anno_df['rad_id'].isin(cfg.data.rad_id)].reset_index()
+    objs = []
+    for j in range(len(bboxes)):
+        obj = {
+            "bbox": list(map(int, bboxes[j])),
+            "bbox_mode": BoxMode.XYXY_ABS,
+            "category_id": class_labels[j]
+        }
+        objs.append(obj)
+
+    record['annotations'] = objs
+
+    return record
+
+
+
+def get_xray_dict(anno_df, data_dir, cfg, target_image_ids):
+    df = anno_df[anno_df['image_id'].isin(target_image_ids)].reset_index(drop=True)
 
     dataset_dicts = []
-    for i, img_id in enumerate(anno_df['image_id'].unique()):
-        record = {}
-
-        img_path = os.path.join(data_dir, 'train', f'{img_id}.png')
-        height, width = cv2.imread(img_path).shape[:2]
-
-        record['file_name'] = img_path
-        record['image_id'] = i
-        record['height'] = height
-        record['width'] = width
-
-        target_df = anno_df[anno_df['image_id'] == img_id]
-        # bboxes
-        if cfg.data.use_class14:
-            bboxes = target_df[['x_min', 'y_min', 'x_max', 'y_max']]
-            bboxes['x_min'] = bboxes['x_min'].fillna(0)
-            bboxes['y_min'] = bboxes['y_min'].fillna(0)
-            bboxes['x_max'] = bboxes['x_max'].fillna(width)
-            bboxes['y_max'] = bboxes['y_max'].fillna(height)
-            bboxes = bboxes.values.tolist()
-        else:
-            bboxes = target_df[['x_min', 'y_min', 'x_max', 'y_max']].values.tolist()
-        # class_labels
-        class_labels = target_df['class_id'].values.tolist()
-
-        objs = []
-        for j in range(len(bboxes)):
-            obj = {
-                "bbox": list(map(int, bboxes[j])),
-                "bbox_mode": BoxMode.XYXY_ABS,
-                "category_id": class_labels[j]
-            }
-            objs.append(obj)
-
-        record['annotations'] = objs
+    for idx, img_id in enumerate(df['image_id'].unique()):
+        record = get_record(img_id, idx, df, data_dir, cfg)
         dataset_dicts.append(record)
 
     return dataset_dicts
@@ -88,9 +85,18 @@ def get_test_xray_dict(data_dir):
     return dataset_dicts
 
 
-def get_submission_det(d, predictor):
+def get_submission_det(d, predictor, data_dir):
     im = cv2.imread(d["file_name"])
+    resized_height, resized_width, _ = im.shape
     image_id = os.path.basename(d["file_name"]).split('.')[0]
+
+    test_image_info = pd.read_csv(os.path.join(data_dir, 'test_image_info.csv'))
+    row = test_image_info[test_image_info['image_id'] == image_id]
+    org_height, org_width = row['height'].values[0], row['width'].values[0]
+
+    h_ratio = org_height / resized_height
+    w_ratio = org_width / resized_width
+
 
     outputs = predictor(im)
     fields = outputs['instances'].get_fields()
@@ -100,6 +106,8 @@ def get_submission_det(d, predictor):
     labels = fields['pred_classes'].detach().cpu().numpy()
 
     # Transform original shape
+    bboxes[:, [0, 2]] *= w_ratio
+    bboxes[:, [1, 3]] *= h_ratio
     bboxes = bboxes.astype(int)
 
     # Get PredictionString
@@ -151,14 +159,14 @@ def get_submission(dataset_dicts, cfg, experiment, predictor):
                 sub_text = '14 1 0 0 1 1'
             elif p1 > cfg.classification_kwargs.lower_th and p1 < cfg.classification_kwargs.upper_th:
                 # Det Predict and add class14
-                image_id, sub_text = get_submission_det(d, predictor)
-                sub_text += f' 14 {p1} 0 0 1 1'
+                image_id, sub_text = get_submission_det(d, predictor, cfg.data.data_dir)
+                sub_text += f'14 {p1} 0 0 1 1'
             else:
                 # Only Det
-                image_id, sub_text = get_submission_det(d, predictor)
+                image_id, sub_text = get_submission_det(d, predictor, cfg.data.data_dir)
         else:
             # Detection Phase
-            image_id, sub_text = get_submission_det(d, predictor)
+            image_id, sub_text = get_submission_det(d, predictor, cfg.data.data_dir)
 
         img_id_list.append(image_id)
         sub_list.append(sub_text)

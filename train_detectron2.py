@@ -1,7 +1,10 @@
-import os, glob, hydra, cv2, shutil
+import os, glob, hydra, cv2, shutil, time
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 from comet_ml import Experiment
+
+import numpy as np
+import pandas as pd
 
 from detectron2 import model_zoo
 from detectron2.engine import DefaultTrainer, DefaultPredictor
@@ -13,6 +16,9 @@ from src.detectron2.helper import get_xray_dict, get_test_xray_dict, get_submiss
 from src.detectron2.trainer import MyTrainer
 from src.utils import seed_everything
 from src.utils import visualize
+
+
+debug = False
 
 @hydra.main(config_name = "config_detectron2")
 def main(cfg: DictConfig):
@@ -70,9 +76,31 @@ def main(cfg: DictConfig):
         class_name_dict.update({14: 'No finding'})
 
     # Register Dataset  --------------------------------------------------
-    DatasetCatalog.register("xray_train", lambda d='train': get_xray_dict(data_dir, cfg))
+    anno_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+
+    if cfg.data.use_class14:
+        pass
+    else:
+        anno_df = anno_df[anno_df['class_id'] != 14].reset_index(drop=True)
+
+    # Extract rad id
+    if cfg.data.rad_id != 'all':
+        anno_df = anno_df[anno_df['rad_id'].isin(cfg.data.rad_id)].reset_index()
+
+    if debug:
+        anno_df = anno_df.head(100)
+
+    # Split train, valid data - random
+    unique_image_ids = anno_df['image_id'].values
+    unique_image_ids = np.random.RandomState(cfg.data.seed).permutation(unique_image_ids)
+    train_image_ids = unique_image_ids[:int(len(unique_image_ids) * 0.8)]
+    valid_image_ids = unique_image_ids[int(len(unique_image_ids) * 0.8):]
+
+    DatasetCatalog.register("xray_train", lambda d='train': get_xray_dict(anno_df, data_dir, cfg, train_image_ids))
+    DatasetCatalog.register("xray_valid", lambda d='valid': get_xray_dict(anno_df, data_dir, cfg, valid_image_ids))
     DatasetCatalog.register("xray_test", lambda d='test': get_test_xray_dict(data_dir))
     MetadataCatalog.get("xray_train").set(thing_classes=list(class_name_dict.values()))
+    MetadataCatalog.get("xray_valid").set(thing_classes=list(class_name_dict.values()))
     MetadataCatalog.get("xray_test").set(thing_classes=list(class_name_dict.values()))
 
     # Config  --------------------------------------------------
@@ -80,7 +108,8 @@ def main(cfg: DictConfig):
     detectron2_cfg.aug_kwargs = CN(rep_aug_kwargs)
     detectron2_cfg.merge_from_file(model_zoo.get_config_file(backbone))
     detectron2_cfg.DATASETS.TRAIN = ("xray_train",)
-    detectron2_cfg.DATASETS.TEST = ()
+    detectron2_cfg.DATASETS.TEST = ("xray_valid",)
+    detectron2_cfg.TEST.EVAL_PERIOD = cfg.train.max_iter // 10
     detectron2_cfg.INPUT.MIN_SIZE_TRAIN = (img_size,)
     detectron2_cfg.INPUT.MAX_SIZE_TRAIN = img_size
     detectron2_cfg.DATALOADER.NUM_WORKERS = cfg.train.num_workers
@@ -89,7 +118,8 @@ def main(cfg: DictConfig):
     detectron2_cfg.SOLVER.BASE_LR = cfg.train.lr
     detectron2_cfg.SOLVER.MAX_ITER = cfg.train.max_iter
     detectron2_cfg.SOLVER.LR_SCHEDULER_NAME = "WarmupCosineLR"
-    detectron2_cfg.SOLVER.CHECKPOINT_PERIOD = 1000
+    detectron2_cfg.SOLVER.WARMUP_ITERS = 2000
+    detectron2_cfg.SOLVER.CHECKPOINT_PERIOD = 2000
     detectron2_cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = cfg.train.batch_size_per_image
     detectron2_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 15 if use_class14 else 14
     detectron2_cfg.OUTPUT_DIR = output_dir
@@ -102,6 +132,11 @@ def main(cfg: DictConfig):
     trainer.resume_or_load(resume=True)
     trainer.train()
 
+    # Rename Last Weight
+    renamed_model = f"{backbone.split('.')[0].replace('/', '-')}.pth"
+    os.rename(os.path.join(cfg.data.output_dir, 'model_final.pth'),
+              os.path.join(cfg.data.output_dir, renamed_model))
+
     # Logging
     for model_path in glob.glob(os.path.join(cfg.data.output_dir, '*.pth')):
         experiment.log_model(name=model_path, file_or_folder=model_path)
@@ -109,11 +144,10 @@ def main(cfg: DictConfig):
     experiment.log_table(os.path.join(output_dir, 'metrics.json'))
 
     # Inference Setting  ------------------------------------------------------
-    model_name = 'model_final.pth'
     detectron2_cfg = get_cfg()
     detectron2_cfg.merge_from_file(model_zoo.get_config_file(backbone))
     detectron2_cfg.MODEL.ROI_HEADS.NUM_CLASSES = 15 if use_class14 else 14
-    detectron2_cfg.MODEL.WEIGHTS = os.path.join(output_dir, model_name)  # path to the model we just trained
+    detectron2_cfg.MODEL.WEIGHTS = os.path.join(output_dir, renamed_model)  # path to the model we just trained
     detectron2_cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = cfg.data.score_th   # set a custom testing threshold
 
     predictor = DefaultPredictor(detectron2_cfg)
@@ -127,12 +161,25 @@ def main(cfg: DictConfig):
 
     visualize(target_image_ids, data_dir, output_dir, experiment, predictor)
 
+    # Metrics
+    metrics_df = pd.read_json(os.path.join(output_dir, 'metrics.json'), orient="records", lines=True)
+    mdf = metrics_df.sort_values("iteration")
+
+    mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
+    for i in range(len(mdf3)):
+        row = mdf3.iloc[i]
+        experiment.log_metric('AP40', row["bbox/AP75"] / 100., step=row["iteration"])
+
+    best_score = mdf3["bbox/AP75"].max() / 100.
+    experiment.log_parameter('Best-AP40-Score', best_score)
+
     # Inference  ------------------------------------------------------
     sub = get_submission(dataset_dicts, cfg, experiment, predictor)
 
-    filename = os.path.join(output_dir, 'submission.csv')
+    filename = 'submission.csv'
     sub.to_csv(filename, index=False)
     experiment.log_asset(file_data=filename, file_name='submission.csv')
+    time.sleep(30)
 
     shutil.rmtree(output_dir)
 
