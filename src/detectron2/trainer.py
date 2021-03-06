@@ -5,7 +5,7 @@ from detectron2.engine import DefaultPredictor, DefaultTrainer, launch
 
 # from detectron2.evaluation import COCOEvaluator, PascalVOCDetectionEvaluator
 from .evaluator import VinbigdataEvaluator
-from .helper import AlbumentationsMapper
+from .mapper import AlbumentationsMapper
 from .loss import LossEvalHook
 
 class MyTrainer(DefaultTrainer):

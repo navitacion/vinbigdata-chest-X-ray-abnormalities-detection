@@ -22,7 +22,7 @@ def main(cfg: DictConfig):
     cur_dir = hydra.utils.get_original_cwd()
     os.chdir(cur_dir)
     # Config  -------------------------------------------------------------------
-    data_dir = './input/resize_1024'
+    data_dir = cfg.data.data_dir
     seed_everything(cfg.data.seed)
 
     load_dotenv('.env')
@@ -35,6 +35,7 @@ def main(cfg: DictConfig):
                             project_name=comet_project_name,
                             auto_param_logging=False,
                             auto_metric_logging=True,
+                            parse_args=False,
                             auto_metric_step_rate=100)
 
     # Log Parameters

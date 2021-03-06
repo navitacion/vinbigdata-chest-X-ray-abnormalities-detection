@@ -75,7 +75,7 @@ def get_bbox_image(img, bboxes, labels):
     return img
 
 
-def visualize(target_image_ids, data_dir, output_dir, experiment, predictor):
+def visualize(target_image_ids, data_dir, output_dir, experiment, predictor, score_th=0.0):
     for target_image_id in target_image_ids:
         fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(28, 18))
         # Ground Truth
@@ -92,13 +92,21 @@ def visualize(target_image_ids, data_dir, output_dir, experiment, predictor):
         fields = outputs['instances'].get_fields()
         bboxes = fields['pred_boxes'].tensor.detach().cpu().numpy()
         labels = fields['pred_classes'].detach().cpu().numpy()
+        scores = fields['scores'].detach().cpu().numpy()
+
+        bboxes = bboxes[scores > score_th]
+        labels = labels[scores > score_th]
+
         display_bbox_image(img, bboxes, labels, ax=axes[1])
         axes[1].set_title('Predict')
         axes[1].axis('off')
 
         plt.tight_layout()
 
-        filename = os.path.join(output_dir, f'result_{target_image_id}.jpg')
+        filename = os.path.join(output_dir, f'result_{target_image_id}_th_{score_th}.jpg')
         fig.savefig(filename)
         experiment.log_image(filename)
         os.remove(filename)
+
+        plt.clf()
+        plt.close()

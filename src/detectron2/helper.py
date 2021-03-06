@@ -1,14 +1,8 @@
-import os, json, cv2, random, glob, time, logging, datetime
-import numpy as np
+import os, cv2, glob
 import pandas as pd
-import matplotlib.pyplot as plt
 from tqdm import tqdm
-import albumentations as A
-import copy
-import numpy as np
 
 import torch
-from detectron2.data import detection_utils as utils
 from detectron2.structures import BoxMode
 
 
@@ -55,7 +49,6 @@ def get_record(img_id, idx, df, data_dir, cfg):
     return record
 
 
-
 def get_xray_dict(anno_df, data_dir, cfg, target_image_ids):
     df = anno_df[anno_df['image_id'].isin(target_image_ids)].reset_index(drop=True)
 
@@ -85,7 +78,7 @@ def get_test_xray_dict(data_dir):
     return dataset_dicts
 
 
-def get_submission_det(d, predictor, data_dir):
+def get_predict_det(d, predictor, data_dir):
     im = cv2.imread(d["file_name"])
     resized_height, resized_width, _ = im.shape
     image_id = os.path.basename(d["file_name"]).split('.')[0]
@@ -96,7 +89,6 @@ def get_submission_det(d, predictor, data_dir):
 
     h_ratio = org_height / resized_height
     w_ratio = org_width / resized_width
-
 
     outputs = predictor(im)
     fields = outputs['instances'].get_fields()
@@ -127,6 +119,21 @@ def get_submission_det(d, predictor, data_dir):
     return image_id, sub_text
 
 
+def get_predict_classification(d, nets, cfg):
+    # Classification Phase
+    img = cv2.imread(d['file_name'])
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    transform = ImageTransform_classification_test(cfg)
+    img = transform(img, phase='test')
+    out = [torch.softmax(m(img.unsqueeze(0)), dim=1) for m in nets]
+    out = torch.cat(out)
+    out = torch.mean(out, 0)
+    p1 = out[1].item()   # 1: class_id == 14  0: class_id != 14
+
+    # Probability of class_id == 14
+    return p1
+
+
 def get_submission(dataset_dicts, cfg, experiment, predictor):
     img_id_list = []
     sub_list = []
@@ -143,30 +150,23 @@ def get_submission(dataset_dicts, cfg, experiment, predictor):
             nets.append(net.eval())
 
     for d in tqdm(dataset_dicts, total=len(dataset_dicts)):
-        if cfg.data.use_classification:
+        if len(nets) == 0:
+            # Detection Phase Only
+            image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
+        else:
             # Classification Phase
-            img = cv2.imread(d['file_name'])
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            transform = ImageTransform_classification_test(cfg)
-            img = transform(img, phase='test')
-            out = [torch.softmax(m(img.unsqueeze(0)), dim=1) for m in nets]
-            out = torch.cat(out)
-            out = torch.mean(out, 0)
-            p1 = out[1].item()   # 1: class_id == 14  0: class_id != 14
+            p1 = get_predict_classification(d, nets, cfg)
 
             if p1 > cfg.classification_kwargs.upper_th:
                 image_id = os.path.basename(d["file_name"]).split('.')[0]
                 sub_text = '14 1 0 0 1 1'
             elif p1 > cfg.classification_kwargs.lower_th and p1 < cfg.classification_kwargs.upper_th:
                 # Det Predict and add class14
-                image_id, sub_text = get_submission_det(d, predictor, cfg.data.data_dir)
+                image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
                 sub_text += f'14 {p1} 0 0 1 1'
             else:
                 # Only Det
-                image_id, sub_text = get_submission_det(d, predictor, cfg.data.data_dir)
-        else:
-            # Detection Phase
-            image_id, sub_text = get_submission_det(d, predictor, cfg.data.data_dir)
+                image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
 
         img_id_list.append(image_id)
         sub_list.append(sub_text)
@@ -177,60 +177,3 @@ def get_submission(dataset_dicts, cfg, experiment, predictor):
     })
 
     return sub
-
-
-"""
-Referenced:
-- https://detectron2.readthedocs.io/en/latest/tutorials/data_loading.html
-- https://www.kaggle.com/dhiiyaur/detectron-2-compare-models-augmentation/#data
-"""
-
-class AlbumentationsMapper:
-    """Mapper which uses `albumentations` augmentations"""
-    def __init__(self, cfg, is_train: bool = True):
-        aug_kwargs = cfg.aug_kwargs
-        aug_list = [
-        ]
-        if is_train:
-            aug_list.extend([getattr(A, name)(**kwargs) for name, kwargs in aug_kwargs.items()])
-        self.transform = A.Compose(
-            aug_list, bbox_params=A.BboxParams(format="pascal_voc", label_fields=["category_ids"])
-        )
-        self.is_train = is_train
-
-        mode = "training" if is_train else "inference"
-        print(f"[AlbumentationsMapper] Augmentations used in {mode}: {self.transform}")
-
-    def __call__(self, dataset_dict):
-        dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
-        image = utils.read_image(dataset_dict["file_name"], format="BGR")
-
-        # aug_input = T.AugInput(image)
-        # transforms = self.augmentations(aug_input)
-        # image = aug_input.image
-
-        prev_anno = dataset_dict["annotations"]
-        bboxes = np.array([obj["bbox"] for obj in prev_anno], dtype=np.float32)
-        # category_id = np.array([obj["category_id"] for obj in dataset_dict["annotations"]], dtype=np.int64)
-        category_id = np.arange(len(dataset_dict["annotations"]))
-
-        transformed = self.transform(image=image, bboxes=bboxes, category_ids=category_id)
-        image = transformed["image"]
-        annos = []
-        for i, j in enumerate(transformed["category_ids"]):
-            d = prev_anno[j]
-            d["bbox"] = transformed["bboxes"][i]
-            annos.append(d)
-        dataset_dict.pop("annotations", None)  # Remove unnecessary field.
-
-        # if not self.is_train:
-        #     # USER: Modify this if you want to keep them for some reason.
-        #     dataset_dict.pop("annotations", None)
-        #     dataset_dict.pop("sem_seg_file_name", None)
-        #     return dataset_dict
-
-        image_shape = image.shape[:2]  # h, w
-        dataset_dict["image"] = torch.as_tensor(image.transpose(2, 0, 1).astype("float32"))
-        instances = utils.annotations_to_instances(annos, image_shape)
-        dataset_dict["instances"] = utils.filter_empty_instances(instances)
-        return dataset_dict

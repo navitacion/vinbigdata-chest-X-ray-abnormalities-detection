@@ -5,11 +5,19 @@ import torch
 import os
 import pandas as pd
 
-data_dir = './input/resize_1024'
-image_id = '002a34c58c5b758217ed1f584ccbcfe9'
 
-test_image_info = pd.read_csv(os.path.join(data_dir, 'test_image_info.csv'))
-row = test_image_info[test_image_info['image_id'] == image_id]
-org_height, org_width = row['height'].values[0], row['width'].values[0]
+output_dir = './detectron2_output/exp01'
+# Metrics
+metrics_df = pd.read_json(os.path.join(output_dir, 'metrics.json'), orient="records", lines=True)
+mdf = metrics_df.sort_values("iteration")
 
-print(org_width, org_height)
+mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
+
+res = []
+
+for i in range(len(mdf3)):
+    row = mdf3.iloc[i]
+    res.append(row["bbox/AP75"] / 100.)
+
+print(res)
+

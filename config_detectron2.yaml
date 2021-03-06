@@ -8,20 +8,22 @@ data:
   img_size: &image_size 1024
   # Ref: https://github.com/facebookresearch/detectron2/blob/master/detectron2/model_zoo/model_zoo.py
   backbone: COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml
-  use_class14: False
+  use_class14: False  # class14は使わないほうが精度高くなる
   seed: 42
   use_classification: True
   score_th: 0.0
   rad_id: all  # Default: all  ex. R9, R10, R11   Set List
+  split_method: all_train  # valid20 or all_train
 
 classification_kwargs:
   weight_dir: ./weights/
   upper_th: 0.95
   lower_th: 0.08
+  img_size: &class_image_size 512
 
 train:
   lr: 0.001
-  max_iter: 10000
+  max_iter: 20000
   num_workers: 4
   batch_size_per_image: 512
   ims_per_batch: 2
@@ -36,5 +38,5 @@ aug_kwargs_detection:
 
 aug_kwargs_classification:
   aug_test:
-    Resize: { "height": *image_size, "width": *image_size }
+    Resize: { "height": *class_image_size, "width": *class_image_size }
     Normalize: { "mean": [ 0.485, 0.456, 0.406 ], "std": [ 0.229, 0.224, 0.225 ] }
