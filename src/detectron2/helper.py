@@ -125,10 +125,13 @@ def get_predict_classification(d, nets, cfg):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     transform = ImageTransform_classification_test(cfg)
     img = transform(img, phase='test')
-    out = [torch.softmax(m(img.unsqueeze(0)), dim=1) for m in nets]
-    out = torch.cat(out)
-    out = torch.mean(out, 0)
-    p1 = out[1].item()   # 1: class_id == 14  0: class_id != 14
+    # out = [torch.softmax(m(img.unsqueeze(0)), dim=1) for m in nets]
+    # out = torch.cat(out)
+    # out = torch.mean(out, 0)
+    # p1 = out[1].item()   # 1: class_id == 14  0: class_id != 14
+
+    out = [torch.sigmoid(m(img.unsqueeze(0))) for m in nets]
+    p1 = torch.cat(out).mean() # 1: class_id == 14  0: class_id != 14
 
     # Probability of class_id == 14
     return p1

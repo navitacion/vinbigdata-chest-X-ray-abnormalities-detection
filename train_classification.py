@@ -34,9 +34,12 @@ def main(cfg: DictConfig):
     experiment = Experiment(api_key=comet_api_key,
                             project_name=comet_project_name,
                             auto_param_logging=False,
-                            auto_metric_logging=True,
+                            auto_metric_logging=False,
                             parse_args=False,
                             auto_metric_step_rate=100)
+
+    experiment_name = f'Classification_{cfg.train.backbone}'
+    experiment.set_name(experiment_name)
 
     # Log Parameters
     experiment.log_parameters(dict(cfg.data))
@@ -49,12 +52,13 @@ def main(cfg: DictConfig):
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='classification')
 
     # Model  -----------------------------------------------------------
-    net = Timm_model(cfg.train.backbone, out_dim=2)
+    net = Timm_model(cfg.train.backbone, out_dim=1)
     # Log Model Graph
     experiment.set_model_graph(str(net))
 
     # Loss fn  -----------------------------------------------------------
-    criterion = nn.CrossEntropyLoss()
+    # criterion = nn.CrossEntropyLoss()
+    criterion = nn.BCEWithLogitsLoss()
 
     # Optimizer, Scheduler  -----------------------------------------------------------
     optimizer = optim.Adam(net.parameters(), lr=cfg.train.lr)

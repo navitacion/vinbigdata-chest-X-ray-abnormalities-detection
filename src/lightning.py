@@ -47,7 +47,7 @@ class ChestXrayDataModule(pl.LightningDataModule):
 
         self.df['is_anomary'] = self.df['class_id'].apply(lambda x: 1 if x == 14 else 0)
         if self.sample:
-            self.df = self.df.sample(frac=self.sample, random_state=0)
+            self.df = self.df.sample(frac=self.sample, random_state=0).reset_index(drop=True)
 
         self.anomary_df = self.df[self.df['class_id'] != 14].reset_index()
 
@@ -173,9 +173,10 @@ class XrayLightningClassification(pl.LightningModule):
     def step(self, batch):
         inp, label, image_id = batch
         inp = inp.float()
-        label = label.long()
+        label = label.float()
 
         out = self.forward(inp)
+        label = label.reshape(out.size())
         loss = self.criterion(out, label)
 
         return loss, label, torch.sigmoid(out), image_id
@@ -190,21 +191,13 @@ class XrayLightningClassification(pl.LightningModule):
 
         return {'val_loss': loss, 'logits': logits, 'labels': label, 'image_id': image_id}
 
-    def test_step(self, batch, batch_idx):
-        inp, image_id = batch
-        inp = inp.float()
-        out = self.forward(inp)
-        logits = torch.softmax(out, dim=1)
-
-        return {'preds': logits, 'image_id': image_id}
-
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
-        logits = torch.cat([x['logits'] for x in outputs])
-        labels = torch.cat([x['labels'] for x in outputs])
+        logits = torch.cat([x['logits'] for x in outputs]).reshape((-1))
+        labels = torch.cat([x['labels'] for x in outputs]).reshape((-1))
 
         # Accuracy
-        acc = self.acc_fn(logits, labels.squeeze())
+        acc = self.acc_fn(logits, labels)
 
         # Logging
         if self.experiment is not None:
@@ -219,22 +212,7 @@ class XrayLightningClassification(pl.LightningModule):
         )
         torch.save(self.net.state_dict(), filename)
         if self.experiment is not None:
-            self.experiment.log_model(name=filename, file_or_folder=filename)
+            self.experiment.log_model(name=filename, file_or_folder=filename, prepend_folder_name=False)
             os.remove(filename)
 
         return {'avg_val_loss': avg_loss}
-
-
-    def test_epoch_end(self, outputs):
-        preds = torch.cat([x['preds'] for x in outputs])
-        preds = preds.detach().cpu().numpy()
-        preds = pd.DataFrame(preds, columns=[f'label_{c}' for c in range(5)])
-        # [tuple, tuple]
-        img_ids = [x['image_id'] for x in outputs]
-        # [list, list]
-        img_ids = [list(x) for x in img_ids]
-        img_ids = list(itertools.chain.from_iterable(img_ids))
-        self.sub = preds
-        self.sub.insert(0, 'image_id', img_ids)
-
-        return None
