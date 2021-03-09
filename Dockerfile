@@ -19,3 +19,5 @@ RUN apt update && apt -y upgrade && apt install -y \
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
 RUN python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+
+RUN python -m pip install 'git+https://github.com/rwightman/efficientdet-pytorch.git'

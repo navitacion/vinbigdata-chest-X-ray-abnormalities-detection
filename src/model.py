@@ -5,6 +5,7 @@ from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator
 from timm import create_model
+import timm
 
 
 class Timm_model(nn.Module):
@@ -21,7 +22,6 @@ class Timm_model(nn.Module):
 
     def forward(self, x):
         return self.base(x)
-
 
 
 # Detection Model  -----------------------------------------------------------------
@@ -72,11 +72,11 @@ def get_original_faster_RCNN(num_classes=14,  pretrained=True):
 if __name__ == '__main__':
     net = create_model('tf_efficientnet_b0_ns', pretrained=False)
 
-    z = torch.randn(4, 3, 512, 512)
+    print(net)
 
-    out = net.forward_features(z)
-    print(out.size())
-    print(out.size(1))
+    # Print Timm Models
+    # model_names = timm.list_models(pretrained=True)
+    # print(model_names)
 
     # print('#'*30)
     # print(backbone)

@@ -121,14 +121,12 @@ def get_predict_det(d, predictor, data_dir):
 
 def get_predict_classification(d, nets, cfg):
     # Classification Phase
-    img = cv2.imread(d['file_name'])
+    image_id = os.path.basename(d["file_name"]).split('.')[0]
+    img_path = os.path.join(cfg.classification_kwargs.data_dir, 'test', f'{image_id}.png')
+    img = cv2.imread(img_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     transform = ImageTransform_classification_test(cfg)
     img = transform(img, phase='test')
-    # out = [torch.softmax(m(img.unsqueeze(0)), dim=1) for m in nets]
-    # out = torch.cat(out)
-    # out = torch.mean(out, 0)
-    # p1 = out[1].item()   # 1: class_id == 14  0: class_id != 14
 
     out = [torch.sigmoid(m(img.unsqueeze(0))) for m in nets]
     p1 = torch.cat(out).mean() # 1: class_id == 14  0: class_id != 14
@@ -148,7 +146,7 @@ def get_submission(dataset_dicts, cfg, experiment, predictor):
         weight_paths = glob.glob(os.path.join(cfg.classification_kwargs.weight_dir, '*.pth'))
         for weight_path in weight_paths:
             backbone = os.path.basename(weight_path).split('-')[0]
-            net = Timm_model(backbone, out_dim=2)
+            net = Timm_model(backbone, out_dim=1)
             net.load_state_dict(torch.load(weight_path))
             nets.append(net.eval())
 

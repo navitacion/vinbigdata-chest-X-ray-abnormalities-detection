@@ -169,16 +169,19 @@ def main(cfg: DictConfig):
         visualize(target_image_ids, data_dir, output_dir, experiment, predictor, score_th=th)
 
     # Metrics
-    metrics_df = pd.read_json(os.path.join(output_dir, 'metrics.json'), orient="records", lines=True)
-    mdf = metrics_df.sort_values("iteration")
+    try:
+        metrics_df = pd.read_json(os.path.join(output_dir, 'metrics.json'), orient="records", lines=True)
+        mdf = metrics_df.sort_values("iteration")
 
-    mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
-    for i in range(len(mdf3)):
-        row = mdf3.iloc[i]
-        experiment.log_metric('AP40', row["bbox/AP75"] / 100., step=row["iteration"])
+        mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
+        for i in range(len(mdf3)):
+            row = mdf3.iloc[i]
+            experiment.log_metric('AP40', row["bbox/AP75"] / 100., step=row["iteration"])
 
-    best_score = mdf3["bbox/AP75"].max() / 100.
-    experiment.log_parameter('Best-AP40-Score', best_score)
+        best_score = mdf3["bbox/AP75"].max() / 100.
+        experiment.log_parameter('Best-AP40-Score', best_score)
+    except:
+        pass
 
     # Inference  ------------------------------------------------------
     sub = get_submission(dataset_dicts, cfg, experiment, predictor)
@@ -192,6 +195,8 @@ def main(cfg: DictConfig):
     time.sleep(30)
 
     shutil.rmtree(output_dir)
+
+    experiment.end()
 
 if __name__ == '__main__':
     main()

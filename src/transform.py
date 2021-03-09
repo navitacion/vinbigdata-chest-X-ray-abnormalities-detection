@@ -64,7 +64,7 @@ class ImageTransform_detection(BaseTransform):
         transform_test_list = [getattr(albu, name)(**kwargs) for name, kwargs in dict(cfg.aug_kwargs_detection.aug_test).items()]
         transform_test_list.append(ToTensorV2())
 
-        bbox_params = albu.BboxParams(format='pascal_voc', min_visibility=0.2, label_fields=['class_labels'])
+        bbox_params = albu.BboxParams(format='pascal_voc', min_visibility=0.0, label_fields=['class_labels'])
 
         self.transform = {
             'train': albu.Compose(transform_train_list, p=1.0, bbox_params=bbox_params),

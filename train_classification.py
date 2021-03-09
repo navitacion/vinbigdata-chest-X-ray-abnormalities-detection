@@ -80,6 +80,8 @@ def main(cfg: DictConfig):
     # Train
     trainer.fit(model, datamodule=dm)
 
+    experiment.end()
+
 
 if __name__ == '__main__':
     main()

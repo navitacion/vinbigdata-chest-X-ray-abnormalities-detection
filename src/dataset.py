@@ -47,8 +47,9 @@ class ChestXrayDataset(Dataset):
                     label = [14]
 
                 target = {}
-                target['boxes'] = torch.from_numpy(bboxes).float()
-                target['labels'] = torch.tensor(label, dtype=torch.int64)
+                # Need yxyx format for EfficientDet.
+                target['boxes'] = torch.stack(tuple(map(torch.tensor, zip(*bboxes)))).permute(1, 0)
+                target['labels'] = torch.tensor(label, dtype=torch.float)
                 target['image_id'] = torch.tensor([idx])
 
                 return img, target, image_id
