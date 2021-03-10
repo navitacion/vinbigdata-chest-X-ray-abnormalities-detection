@@ -8,6 +8,7 @@ import matplotlib.patches as patches
 import random
 import torch
 from torch.utils.data import Dataset
+import wandb
 
 class_name_dict = {
     0: 'Aortic enlargement',
@@ -75,7 +76,7 @@ def get_bbox_image(img, bboxes, labels):
     return img
 
 
-def visualize(target_image_ids, data_dir, output_dir, experiment, predictor, score_th=0.0):
+def visualize(target_image_ids, data_dir, output_dir, predictor, score_th=0.0):
     for target_image_id in target_image_ids:
         fig, axes = plt.subplots(ncols=2, nrows=1, figsize=(28, 18))
         # Ground Truth
@@ -105,8 +106,7 @@ def visualize(target_image_ids, data_dir, output_dir, experiment, predictor, sco
 
         filename = os.path.join(output_dir, f'result_{target_image_id}_th_{score_th}.jpg')
         fig.savefig(filename)
-        experiment.log_image(filename)
-        os.remove(filename)
+        wandb.save(filename)
 
         plt.clf()
         plt.close()

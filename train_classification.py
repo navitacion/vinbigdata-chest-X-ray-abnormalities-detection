@@ -2,13 +2,14 @@ import os
 import hydra
 from dotenv import load_dotenv
 from omegaconf import DictConfig
-from comet_ml import Experiment
+import wandb
 from sklearn.model_selection import StratifiedKFold
 
 
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from pytorch_lightning import Trainer
+from pytorch_lightning.loggers import WandbLogger
 
 from src.utils import seed_everything
 from src.transform import ImageTransform_classification
@@ -26,25 +27,11 @@ def main(cfg: DictConfig):
     seed_everything(cfg.data.seed)
 
     load_dotenv('.env')
-    comet_api_key = os.environ['COMET_ML_KEY']
-    comet_project_name = os.environ['COMET_ML_PROJECT_NAME']
-
-    # Logging
-    # Comet_ml
-    experiment = Experiment(api_key=comet_api_key,
-                            project_name=comet_project_name,
-                            auto_param_logging=False,
-                            auto_metric_logging=False,
-                            parse_args=False,
-                            auto_metric_step_rate=100)
-
-    experiment_name = f'Classification_{cfg.train.backbone}'
-    experiment.set_name(experiment_name)
-
-    # Log Parameters
-    experiment.log_parameters(dict(cfg.data))
-    experiment.log_parameters(dict(cfg.train))
-    experiment.log_parameters(dict(cfg.aug_kwargs_classification))
+    wandb.login()
+    wandb_logger = WandbLogger(project='VinBigData-Classification', log_model=True)
+    wandb_logger.log_hyperparams(dict(cfg.data))
+    wandb_logger.log_hyperparams(dict(cfg.train))
+    wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
 
     # Data Module  -------------------------------------------------------------------
     transform = ImageTransform_classification(cfg)
@@ -53,11 +40,8 @@ def main(cfg: DictConfig):
 
     # Model  -----------------------------------------------------------
     net = Timm_model(cfg.train.backbone, out_dim=1)
-    # Log Model Graph
-    experiment.set_model_graph(str(net))
 
     # Loss fn  -----------------------------------------------------------
-    # criterion = nn.CrossEntropyLoss()
     criterion = nn.BCEWithLogitsLoss()
 
     # Optimizer, Scheduler  -----------------------------------------------------------
@@ -65,14 +49,15 @@ def main(cfg: DictConfig):
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
 
     # Lightning Module
-    model = XrayLightningClassification(net, cfg, criterion, optimizer, scheduler, experiment=experiment)
+    model = XrayLightningClassification(net, cfg, criterion, optimizer, scheduler)
 
     # Trainer  --------------------------------------------------------------------------
     trainer = Trainer(
-        logger=False,
+        logger=wandb_logger,
+        log_every_n_steps=1,
         max_epochs=cfg.train.epoch,
         gpus=-1,
-        num_sanity_val_steps=0,
+        deterministic=True,
         amp_level='O2',
         amp_backend='apex'
     )
@@ -80,7 +65,7 @@ def main(cfg: DictConfig):
     # Train
     trainer.fit(model, datamodule=dm)
 
-    experiment.end()
+    wandb.finish()
 
 
 if __name__ == '__main__':

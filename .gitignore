@@ -9,3 +9,4 @@ checkpoints/*
 multirun/*
 weights/*
 submission/*
+wandb/*

@@ -1,10 +1,12 @@
 import os
 import cv2
 import glob
+import time
 import itertools
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import wandb
 
 import torch
 from torch.utils.data import DataLoader
@@ -191,6 +193,14 @@ class XrayLightningClassification(pl.LightningModule):
 
         return {'val_loss': loss, 'logits': logits, 'labels': label, 'image_id': image_id}
 
+
+    def training_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
+        # Logging
+        self.log('train/loss', avg_loss, on_step=False, on_epoch=True)
+
+        return None
+
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
         logits = torch.cat([x['logits'] for x in outputs]).reshape((-1))
@@ -200,10 +210,8 @@ class XrayLightningClassification(pl.LightningModule):
         acc = self.acc_fn(logits, labels)
 
         # Logging
-        if self.experiment is not None:
-            logs = {'val/loss': avg_loss.item(), 'val/acc': acc.item()}
-            # Logging
-            self.experiment.log_metrics(logs, epoch=self.current_epoch)
+        self.log('val/loss', avg_loss, on_step=False, on_epoch=True)
+        self.log('val/acc', acc, on_step=False, on_epoch=True)
 
         # Save Weights
         filename = '{}-seed_{}_fold_{}_ims_{}_epoch_{}_loss_{:.3f}_acc_{:.3f}.pth'.format(
@@ -211,8 +219,8 @@ class XrayLightningClassification(pl.LightningModule):
             self.cfg.data.img_size, self.current_epoch, avg_loss.item(), acc.item()
         )
         torch.save(self.net.state_dict(), filename)
-        if self.experiment is not None:
-            self.experiment.log_model(name=filename, file_or_folder=filename, prepend_folder_name=False)
-            os.remove(filename)
+        wandb.save(filename)
+        time.sleep(5)
+        os.remove(filename)
 
-        return {'avg_val_loss': avg_loss}
+        return None

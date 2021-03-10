@@ -2,6 +2,7 @@ import os, glob, hydra, cv2, shutil, time, datetime
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 from comet_ml import Experiment
+import wandb
 
 import numpy as np
 import pandas as pd
@@ -27,23 +28,30 @@ def main(cfg: DictConfig):
     seed_everything(cfg.data.seed)
 
     load_dotenv('.env')
-    comet_api_key = os.environ['COMET_ML_KEY']
-    comet_project_name = os.environ['COMET_ML_PROJECT_NAME']
+    # comet_api_key = os.environ['COMET_ML_KEY']
+    # comet_project_name = os.environ['COMET_ML_PROJECT_NAME']
+    #
+    # # Logging
+    # # Comet_ml
+    # experiment = Experiment(api_key=comet_api_key,
+    #                         project_name=comet_project_name,
+    #                         auto_param_logging=False,
+    #                         auto_metric_logging=True,
+    #                         parse_args=False,
+    #                         auto_metric_step_rate=100)
+    #
+    # # Log Parameters
+    # experiment.log_parameters(dict(cfg.data))
+    # experiment.log_parameters(dict(cfg.train))
+    # experiment.log_parameters(dict(cfg.aug_kwargs_detection))
+    # experiment.log_parameters(dict(cfg.classification_kwargs))
 
-    # Logging
-    # Comet_ml
-    experiment = Experiment(api_key=comet_api_key,
-                            project_name=comet_project_name,
-                            auto_param_logging=False,
-                            auto_metric_logging=True,
-                            parse_args=False,
-                            auto_metric_step_rate=100)
-
-    # Log Parameters
-    experiment.log_parameters(dict(cfg.data))
-    experiment.log_parameters(dict(cfg.train))
-    experiment.log_parameters(dict(cfg.aug_kwargs_detection))
-    experiment.log_parameters(dict(cfg.classification_kwargs))
+    # wandb
+    wandb.init(project='VinBigData-Detection')
+    wandb.config.update(dict(cfg.data))
+    wandb.config.update(dict(cfg.train))
+    wandb.config.update(dict(cfg.aug_kwargs_detection))
+    wandb.config.update(dict(cfg.classification_kwargs))
 
     # omegaconf -> dict
     rep_aug_kwargs = dict(cfg.aug_kwargs_detection)
@@ -147,7 +155,8 @@ def main(cfg: DictConfig):
 
     # Logging
     for model_path in glob.glob(os.path.join(cfg.data.output_dir, '*.pth')):
-        experiment.log_model(name=model_path, file_or_folder=model_path)
+        # experiment.log_model(name=model_path, file_or_folder=model_path)
+        wandb.save(model_path)
 
     # Inference Setting  ------------------------------------------------------
     detectron2_cfg = get_cfg()
@@ -166,7 +175,7 @@ def main(cfg: DictConfig):
                         '008b3176a7248a0a189b5731ac8d2e95']
 
     for th in [0, 0.2, 0.5, 0.7]:
-        visualize(target_image_ids, data_dir, output_dir, experiment, predictor, score_th=th)
+        visualize(target_image_ids, data_dir, output_dir, predictor, score_th=th)
 
     # Metrics
     try:
@@ -176,27 +185,30 @@ def main(cfg: DictConfig):
         mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
         for i in range(len(mdf3)):
             row = mdf3.iloc[i]
-            experiment.log_metric('AP40', row["bbox/AP75"] / 100., step=row["iteration"])
+            # experiment.log_metric('AP40', row["bbox/AP75"] / 100., step=row["iteration"])
+            wandb.log({'AP40': row["bbox/AP75"] / 100.}, step=row['iteration'])
 
         best_score = mdf3["bbox/AP75"].max() / 100.
-        experiment.log_parameter('Best-AP40-Score', best_score)
+        # experiment.log_parameter('Best-AP40-Score', best_score)
+        wandb.log({'Best-AP40-Score': best_score})
     except:
         pass
 
     # Inference  ------------------------------------------------------
-    sub = get_submission(dataset_dicts, cfg, experiment, predictor)
+    sub = get_submission(dataset_dicts, cfg, predictor)
 
     now = datetime.datetime.now() + datetime.timedelta(hours=9)
     now = now.strftime("%Y%m%d-%H%M%S")
 
     filename = f'submission_{now}.csv'
     sub.to_csv(os.path.join('./submission', filename), index=False)
-    experiment.log_asset(file_data=os.path.join('./submission', filename), file_name='submission.csv')
+    wandb.save(os.path.join('./submission', filename))
     time.sleep(30)
 
-    shutil.rmtree(output_dir)
+    # shutil.rmtree(output_dir)
 
-    experiment.end()
+    wandb.finish()
+    # experiment.end()
 
 if __name__ == '__main__':
     main()

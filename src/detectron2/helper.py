@@ -1,6 +1,7 @@
 import os, cv2, glob
 import pandas as pd
 from tqdm import tqdm
+import wandb
 
 import torch
 from detectron2.structures import BoxMode
@@ -135,14 +136,15 @@ def get_predict_classification(d, nets, cfg):
     return p1
 
 
-def get_submission(dataset_dicts, cfg, experiment, predictor):
+def get_submission(dataset_dicts, cfg, predictor):
     img_id_list = []
     sub_list = []
 
     # Classification Model Setting
     nets = []
     if cfg.data.use_classification:
-        experiment.log_asset_folder(cfg.classification_kwargs.weight_dir)
+        # experiment.log_asset_folder(cfg.classification_kwargs.weight_dir)
+        wandb.save(os.path.join(cfg.classification_kwargs.weight_dir, '*.pth'))
         weight_paths = glob.glob(os.path.join(cfg.classification_kwargs.weight_dir, '*.pth'))
         for weight_path in weight_paths:
             backbone = os.path.basename(weight_path).split('-')[0]
