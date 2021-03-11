@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
+
 class ChestXrayDataset(Dataset):
     def __init__(self, img_path, transform=None, phase='train', df=None, data_type='detection'):
         self.img_path = img_path
@@ -15,7 +16,6 @@ class ChestXrayDataset(Dataset):
     def __len__(self):
         return len(self.img_path)
 
-
     def __getitem__(self, idx):
 
         img_path = self.img_path[idx]
@@ -23,7 +23,7 @@ class ChestXrayDataset(Dataset):
 
         # Load Image
         img = cv2.imread(img_path)
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.float32)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.uint8)
 
         if not self.phase == 'test':
             # Get label

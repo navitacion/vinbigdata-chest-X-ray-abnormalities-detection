@@ -7,7 +7,7 @@ import torch
 from detectron2.structures import BoxMode
 
 
-from src.transform import ImageTransform_classification_test
+from src.transform import ImageTransform_cls_test
 from src.model import Timm_model
 
 
@@ -126,7 +126,7 @@ def get_predict_classification(d, nets, cfg):
     img_path = os.path.join(cfg.classification_kwargs.data_dir, 'test', f'{image_id}.png')
     img = cv2.imread(img_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    transform = ImageTransform_classification_test(cfg)
+    transform = ImageTransform_cls_test(cfg)
     img = transform(img, phase='test')
 
     out = [torch.sigmoid(m(img.unsqueeze(0))) for m in nets]

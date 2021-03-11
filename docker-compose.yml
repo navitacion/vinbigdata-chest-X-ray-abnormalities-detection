@@ -1,0 +1,19 @@
+version: '3'
+services:
+  env:
+    build: ./
+    user: root
+    shm_size: 24gb
+    # Use GPU
+    # ref: https://qiita.com/gonzou122/items/7b5e74d7c4c5f3e969af
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - 'driver': 'nvidia'
+              'capabilities': [ 'gpu' ]
+    volumes:
+      - ./:/workspace
+    working_dir: /workspace
+    tty: true
+    command: bash

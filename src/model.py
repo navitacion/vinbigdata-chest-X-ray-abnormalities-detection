@@ -17,6 +17,8 @@ class Timm_model(nn.Module):
             self.base.classifier = nn.Linear(in_features=self.base.classifier.in_features, out_features=out_dim)
         elif 'vit' in model_name:
             self.base.head = nn.Linear(in_features=self.base.head.in_features, out_features=out_dim)
+        elif "dm_nfnet" in model_name:
+            self.base.head.fc = nn.Linear(in_features=self.base.head.fc.in_features, out_features=out_dim)
         else:
             self.base.fc = nn.Linear(in_features=self.base.fc.in_features, out_features=out_dim)
 
@@ -70,8 +72,11 @@ def get_original_faster_RCNN(num_classes=14,  pretrained=True):
 
 
 if __name__ == '__main__':
-    net = create_model('tf_efficientnet_b0_ns', pretrained=False)
+    net = create_model('dm_nfnet_f4', pretrained=False)
 
+    print(net)
+
+    net = Timm_model("dm_nfnet_f4", pretrained=False)
     print(net)
 
     # Print Timm Models

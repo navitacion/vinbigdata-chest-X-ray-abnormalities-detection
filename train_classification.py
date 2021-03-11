@@ -5,19 +5,18 @@ from omegaconf import DictConfig
 import wandb
 from sklearn.model_selection import StratifiedKFold
 
-
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers import WandbLogger
 
 from src.utils import seed_everything
-from src.transform import ImageTransform_classification
+from src.transform import ImageTransform
 from src.lightning import ChestXrayDataModule, XrayLightningClassification
 from src.model import Timm_model
 
 
-@hydra.main(config_name = "config.yaml")
+@hydra.main(config_name="config.yaml")
 def main(cfg: DictConfig):
     print('VinBigData Training Classification')
     cur_dir = hydra.utils.get_original_cwd()
@@ -28,13 +27,13 @@ def main(cfg: DictConfig):
 
     load_dotenv('.env')
     wandb.login()
-    wandb_logger = WandbLogger(project='VinBigData-Classification', log_model=True)
+    wandb_logger = WandbLogger(project='VinBigData-Classification', log_model=False)
     wandb_logger.log_hyperparams(dict(cfg.data))
     wandb_logger.log_hyperparams(dict(cfg.train))
     wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
 
     # Data Module  -------------------------------------------------------------------
-    transform = ImageTransform_classification(cfg)
+    transform = ImageTransform(cfg, type='classification')
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='classification')
 
@@ -47,14 +46,13 @@ def main(cfg: DictConfig):
     # Optimizer, Scheduler  -----------------------------------------------------------
     optimizer = optim.Adam(net.parameters(), lr=cfg.train.lr)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
-
     # Lightning Module
     model = XrayLightningClassification(net, cfg, criterion, optimizer, scheduler)
 
     # Trainer  --------------------------------------------------------------------------
     trainer = Trainer(
         logger=wandb_logger,
-        log_every_n_steps=1,
+        log_every_n_steps=100,
         max_epochs=cfg.train.epoch,
         gpus=-1,
         deterministic=True,
@@ -65,6 +63,7 @@ def main(cfg: DictConfig):
     # Train
     trainer.fit(model, datamodule=dm)
 
+    wandb_logger.finalize()
     wandb.finish()
 
 

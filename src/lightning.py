@@ -185,6 +185,7 @@ class XrayLightningClassification(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, _, _, _ = self.step(batch)
+        self.log("train/loss", loss)
 
         return {'loss': loss}
 
@@ -197,7 +198,7 @@ class XrayLightningClassification(pl.LightningModule):
     def training_epoch_end(self, outputs):
         avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
         # Logging
-        self.log('train/loss', avg_loss, on_step=False, on_epoch=True)
+        self.log('train/epoch_loss', avg_loss, on_step=False, on_epoch=True)
 
         return None
 
@@ -210,8 +211,8 @@ class XrayLightningClassification(pl.LightningModule):
         acc = self.acc_fn(logits, labels)
 
         # Logging
-        self.log('val/loss', avg_loss, on_step=False, on_epoch=True)
-        self.log('val/acc', acc, on_step=False, on_epoch=True)
+        self.log('val/epoch_loss', avg_loss, on_step=False, on_epoch=True)
+        self.log('val/epoch_acc', acc, on_step=False, on_epoch=True)
 
         # Save Weights
         filename = '{}-seed_{}_fold_{}_ims_{}_epoch_{}_loss_{:.3f}_acc_{:.3f}.pth'.format(
@@ -220,7 +221,5 @@ class XrayLightningClassification(pl.LightningModule):
         )
         torch.save(self.net.state_dict(), filename)
         wandb.save(filename)
-        time.sleep(5)
-        os.remove(filename)
 
         return None
