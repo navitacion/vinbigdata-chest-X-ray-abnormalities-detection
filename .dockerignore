@@ -3,3 +3,4 @@ checkpoints/*
 weights/*
 hydra_output/*
 multirun/*
+submission/*

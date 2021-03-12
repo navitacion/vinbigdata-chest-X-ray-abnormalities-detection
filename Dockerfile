@@ -5,7 +5,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /workspace
 
-COPY ./ ./
+COPY requirements.txt ./
 
 RUN apt update && apt -y upgrade && apt install -y \
   build-essential \

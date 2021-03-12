@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
 
     load_dotenv('.env')
     wandb.login()
-    wandb_logger = WandbLogger(project='VinBigData-Classification', log_model=False)
+    wandb_logger = WandbLogger(project='VinBigData-Classification', log_model=False, save_dir=None)
     wandb_logger.log_hyperparams(dict(cfg.data))
     wandb_logger.log_hyperparams(dict(cfg.train))
     wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
@@ -63,8 +63,8 @@ def main(cfg: DictConfig):
     # Train
     trainer.fit(model, datamodule=dm)
 
-    wandb_logger.finalize()
-    wandb.finish()
+    # wandb_logger.finalize()
+    # wandb.finish()
 
 
 if __name__ == '__main__':
