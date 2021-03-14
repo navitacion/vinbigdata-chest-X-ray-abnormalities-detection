@@ -2,6 +2,7 @@ version: '3'
 services:
   env:
     build: ./
+    container_name: vin_env
     user: root
     shm_size: 24gb
     # Use GPU

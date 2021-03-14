@@ -207,7 +207,7 @@ def main(cfg: DictConfig):
 
     # shutil.rmtree(output_dir)
 
-    wandb.finish()
+    # wandb.finish()
     # experiment.end()
 
 if __name__ == '__main__':

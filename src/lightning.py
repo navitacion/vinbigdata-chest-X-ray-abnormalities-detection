@@ -155,12 +155,8 @@ class XrayLightningClassification(pl.LightningModule):
         self.criterion = criterion
         self.optimizer = optimizer
         self.scheduler = scheduler
-        self.best_loss = 1e+9
-        self.best_acc = 0
-        self.epoch_num = 0
         self.acc_fn = metrics.Accuracy()
-        self.train_step = 0
-        self.valid_step = 0
+        self.weight_paths = []
 
     def configure_optimizers(self):
         if self.scheduler is None:
@@ -174,7 +170,6 @@ class XrayLightningClassification(pl.LightningModule):
 
     def step(self, batch):
         inp, label, image_id = batch
-        inp = inp.float()
         label = label.float()
 
         out = self.forward(inp)
@@ -185,22 +180,16 @@ class XrayLightningClassification(pl.LightningModule):
 
     def training_step(self, batch, batch_idx):
         loss, _, _, _ = self.step(batch)
-        self.log("train/loss", loss)
+        self.log('train/loss', loss, on_epoch=True)
 
         return {'loss': loss}
 
     def validation_step(self, batch, batch_idx):
         loss, label, logits, image_id = self.step(batch)
+        self.log('val/loss', loss, on_epoch=True)
 
         return {'val_loss': loss, 'logits': logits, 'labels': label, 'image_id': image_id}
 
-
-    def training_epoch_end(self, outputs):
-        avg_loss = torch.stack([x['loss'] for x in outputs]).mean()
-        # Logging
-        self.log('train/epoch_loss', avg_loss, on_step=False, on_epoch=True)
-
-        return None
 
     def validation_epoch_end(self, outputs):
         avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
@@ -211,7 +200,6 @@ class XrayLightningClassification(pl.LightningModule):
         acc = self.acc_fn(logits, labels)
 
         # Logging
-        self.log('val/epoch_loss', avg_loss, on_step=False, on_epoch=True)
         self.log('val/epoch_acc', acc, on_step=False, on_epoch=True)
 
         # Save Weights
@@ -221,5 +209,6 @@ class XrayLightningClassification(pl.LightningModule):
         )
         torch.save(self.net.state_dict(), filename)
         wandb.save(filename)
+        self.weight_paths.append(filename)
 
         return None

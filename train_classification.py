@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
 
     load_dotenv('.env')
     wandb.login()
-    wandb_logger = WandbLogger(project='VinBigData-Classification', log_model=False, save_dir=None)
+    wandb_logger = WandbLogger(project='VinBigData-Classification', reinit=True)
     wandb_logger.log_hyperparams(dict(cfg.data))
     wandb_logger.log_hyperparams(dict(cfg.train))
     wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
@@ -35,7 +35,7 @@ def main(cfg: DictConfig):
     # Data Module  -------------------------------------------------------------------
     transform = ImageTransform(cfg, type='classification')
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
-    dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='classification')
+    dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='classification', sample=False)
 
     # Model  -----------------------------------------------------------
     net = Timm_model(cfg.train.backbone, out_dim=1)
@@ -55,6 +55,7 @@ def main(cfg: DictConfig):
         log_every_n_steps=100,
         max_epochs=cfg.train.epoch,
         gpus=-1,
+        num_sanity_val_steps=0,
         deterministic=True,
         amp_level='O2',
         amp_backend='apex'
@@ -63,8 +64,11 @@ def main(cfg: DictConfig):
     # Train
     trainer.fit(model, datamodule=dm)
 
-    # wandb_logger.finalize()
-    # wandb.finish()
+    # Stop Logging
+    wandb.finish()
+
+    for p in model.weight_paths:
+        os.remove(p)
 
 
 if __name__ == '__main__':

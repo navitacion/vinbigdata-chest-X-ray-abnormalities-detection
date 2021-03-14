@@ -24,6 +24,7 @@ class ChestXrayDataset(Dataset):
         # Load Image
         img = cv2.imread(img_path)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB).astype(np.uint8)
+        height, width = img.shape[:2]
 
         if not self.phase == 'test':
             # Get label
@@ -43,7 +44,7 @@ class ChestXrayDataset(Dataset):
                     bboxes = np.array(bboxes)
                 # has no bboxes
                 else:
-                    bboxes = np.array([[0, 0, 1, 1]])
+                    bboxes = np.array([[0, 0, height, width]])
                     label = [14]
 
                 target = {}
@@ -63,6 +64,7 @@ class ChestXrayDataset(Dataset):
 
                 # Augmentations
                 img = self.transform(img, phase=self.phase)
+                img = img.float()
 
                 return img, label, image_id
 
