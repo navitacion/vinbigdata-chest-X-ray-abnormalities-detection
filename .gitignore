@@ -10,3 +10,4 @@ multirun/*
 weights/*
 submission/*
 wandb/*
+VinBigData-Classification/*
