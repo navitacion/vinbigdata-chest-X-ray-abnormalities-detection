@@ -90,17 +90,17 @@ class ChestXrayDataModule(pl.LightningDataModule):
 
         # Dataset
         # Train
-        self.train_dataset = ChestXrayDataset(self.train_img_paths,
+        self.train_dataset = ChestXrayDataset(self.train_img_paths, self.cfg,
                                               transform=self.transform,
                                               phase='train', df=df,
                                               data_type=self.data_type)
         # Valid
-        self.valid_dataset = ChestXrayDataset(self.val_img_paths,
+        self.valid_dataset = ChestXrayDataset(self.val_img_paths, self.cfg,
                                               transform=self.transform,
                                               phase='val', df=df,
                                               data_type=self.data_type)
         # Test
-        self.test_dataset = ChestXrayDataset(self.test_img_paths,
+        self.test_dataset = ChestXrayDataset(self.test_img_paths, self.cfg,
                                              transform=self.transform,
                                              phase='test', df=None,
                                              data_type=self.data_type)
@@ -114,6 +114,7 @@ class ChestXrayDataModule(pl.LightningDataModule):
                           pin_memory=True,
                           num_workers=self.cfg.train.num_workers,
                           shuffle=True,
+                          drop_last=True,
                           collate_fn=self.collate_fn)
 
     def val_dataloader(self):
@@ -206,6 +207,119 @@ class XrayLightningClassification(pl.LightningModule):
         filename = '{}-seed_{}_fold_{}_ims_{}_epoch_{}_loss_{:.3f}_acc_{:.3f}.pth'.format(
             self.cfg.train.backbone, self.cfg.data.seed, self.cfg.train.fold,
             self.cfg.data.img_size, self.current_epoch, avg_loss.item(), acc.item()
+        )
+        torch.save(self.net.state_dict(), filename)
+        wandb.save(filename)
+        self.weight_paths.append(filename)
+
+        return None
+
+
+class XrayLightningDetection(pl.LightningModule):
+    def __init__(self, net, cfg, optimizer, scheduler=None):
+        """
+        ------------------------------------
+        Parameters
+        net: torch.nn.Module
+            Model
+        cfg: DictConfig
+            Config
+        optimizer: torch.optim
+            Optimizer
+        scheduler: torch.optim.lr_scheduler
+            Learning Rate Scheduler
+        experiment: comet_ml.experiment
+            Logger(Comet_ML)
+        """
+        super(XrayLightningDetection, self).__init__()
+        self.net = net
+        self.cfg = cfg
+        self.optimizer = optimizer
+        self.scheduler = scheduler
+        self.weight_paths = []
+
+    def modify_detections(self, det, images):
+        """
+        出力したbboxを変形
+        """
+        predictions = []
+        for i in range(images.shape[0]):
+            boxes = det[i].detach().cpu().numpy()[:, :4]
+            scores = det[i].detach().cpu().numpy()[:, 4]
+            labels = det[i].detach().cpu().numpy()[:, 5]
+            indexes = np.where(scores > 0)[0]
+            boxes = boxes[indexes]
+            boxes[:, 2] = boxes[:, 2] + boxes[:, 0]
+            boxes[:, 3] = boxes[:, 3] + boxes[:, 1]
+            predictions.append({
+                'boxes': boxes[indexes],
+                'scores': scores[indexes],
+                'labels': labels[indexes]
+            })
+
+        return predictions
+
+
+    def configure_optimizers(self):
+        if self.scheduler is None:
+            return [self.optimizer], []
+        else:
+            return [self.optimizer], [self.scheduler]
+
+    def forward(self, x, targets):
+        output = self.net(x, targets)
+        return output
+
+    def training_step(self, batch, batch_idx):
+        images, targets, image_id = batch
+        images = torch.stack(images).float()
+
+        target_res = {}
+        boxes = [target['boxes'].float() for target in targets]
+        labels = [target['labels'].float() for target in targets]
+        target_res['bbox'] = boxes
+        target_res['cls'] = labels
+
+        output = self.forward(images, target_res)
+
+        # logging
+        self.log('train/loss', output['loss'], on_epoch=True)
+        self.log('train/class_loss', output['class_loss'], on_epoch=True)
+        self.log('train/box_loss', output['box_loss'], on_epoch=True)
+
+        return {'loss': output['loss']}
+
+    def validation_step(self, batch, batch_idx):
+        images, targets, image_id = batch
+        images = torch.stack(images).float()
+
+        target_res = {}
+        boxes = [target['boxes'].float() for target in targets]
+        labels = [target['labels'].float() for target in targets]
+        target_res['bbox'] = boxes
+        target_res['cls'] = labels
+        target_res["img_scale"] = torch.tensor([1.0] * self.cfg.train.batch_size, dtype=torch.float)
+        target_res["img_size"] = torch.tensor([images[0].shape[-2:]] * self.cfg.train.batch_size, dtype=torch.float)
+
+        output = self.forward(images, target_res)
+
+        predictions = self.modify_detections(output['detections'], images)
+
+        # logging
+        self.log('val/loss', output['loss'], on_epoch=True)
+        self.log('val/class_loss', output['class_loss'], on_epoch=True)
+        self.log('val/box_loss', output['box_loss'], on_epoch=True)
+
+        return {'val_loss': output['loss'], 'predictions': predictions, 'image_id': image_id}
+
+
+    def validation_epoch_end(self, outputs):
+        avg_loss = torch.stack([x['val_loss'] for x in outputs]).mean()
+
+        # Save Weights
+        filename = '{}-seed_{}_fold_{}_ims_{}_epoch_{}_loss_{:.3f}.pth'.format(
+            self.cfg.train.backbone, self.cfg.data.seed, self.cfg.train.fold,
+            self.cfg.data.img_size, self.current_epoch, avg_loss.item()
         )
         torch.save(self.net.state_dict(), filename)
         wandb.save(filename)

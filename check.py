@@ -1,5 +1,6 @@
 import os
 import hydra
+import numpy as np
 from dotenv import load_dotenv
 from omegaconf import DictConfig
 import wandb
@@ -42,10 +43,48 @@ def main(cfg: DictConfig):
 
     dataloader = dm.train_dataloader()
 
-    image, target, image_id = next(iter(dataloader))
-
     # Model  -----------------------------------------------------------
-    net = get_effdet_model(cfg, pretrained=True)
+    net = get_effdet_model(cfg, pretrained=False, task='train')
+
+    images, targets, image_id = next(iter(dataloader))
+
+    images = torch.stack(images).float()
+
+    target_res = {}
+    boxes = [target['boxes'].float() for target in targets]
+    labels = [target['labels'].float() for target in targets]
+    target_res['bbox'] = boxes
+    target_res['cls'] = labels
+
+    output = net(images, target_res)
+    loss = output['loss']
+
+    net.eval()
+    target_res = {}
+    boxes = [target['boxes'].float() for target in targets]
+    labels = [target['labels'].float() for target in targets]
+    target_res['bbox'] = boxes
+    target_res['cls'] = labels
+    target_res["img_scale"] = torch.tensor([1.0] * cfg.train.batch_size, dtype=torch.float)
+    target_res["img_size"] = torch.tensor([images[0].shape[-2:]] * cfg.train.batch_size, dtype=torch.float)
+
+    output = net(images, target_res)
+    loss = output['loss']
+    det = output['detections']
+    predictions = []
+    for i in range(images.shape[0]):
+        boxes = det[i].detach().cpu().numpy()[:, :4]
+        scores = det[i].detach().cpu().numpy()[:, 4]
+        labels = det[i].detach().cpu().numpy()[:, 5]
+        indexes = np.where(scores > 0)[0]
+        boxes = boxes[indexes]
+        boxes[:, 2] = boxes[:, 2] + boxes[:, 0]
+        boxes[:, 3] = boxes[:, 3] + boxes[:, 1]
+        predictions.append({
+            'boxes': boxes[indexes],
+            'scores': scores[indexes],
+            'labels': labels[indexes]
+        })
 
     # Optimizer, Scheduler  -----------------------------------------------------------
     param_optimizer = list(net.named_parameters())

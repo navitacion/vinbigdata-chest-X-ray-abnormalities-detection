@@ -12,7 +12,7 @@ from pytorch_lightning.loggers import WandbLogger
 
 from src.utils import seed_everything
 from src.transform import ImageTransform
-from src.lightning import ChestXrayDataModule, XrayLightningClassification
+from src.lightning import ChestXrayDataModule, XrayLightningDetection
 from src.model import get_effdet_model
 
 
@@ -38,30 +38,28 @@ def main(cfg: DictConfig):
     dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='detection', sample=False)
 
     # Model  -----------------------------------------------------------
-    net = get_effdet_model(cfg, pretrained=True)
+    net = get_effdet_model(cfg, pretrained=True, task='train')
 
     # Optimizer, Scheduler  -----------------------------------------------------------
-    param_optimizer = list(net.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
     optimizer = optim.Adam(net.parameters(), lr=cfg.train.lr)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
-    # # Lightning Module
-    # model = XrayLightningClassification(net, cfg, criterion, optimizer, scheduler)
-    #
-    # # Trainer  --------------------------------------------------------------------------
-    # trainer = Trainer(
-    #     logger=wandb_logger,
-    #     log_every_n_steps=100,
-    #     max_epochs=cfg.train.epoch,
-    #     gpus=-1,
-    #     num_sanity_val_steps=0,
-    #     deterministic=True,
-    #     amp_level='O2',
-    #     amp_backend='apex'
-    # )
-    #
-    # # Train
-    # trainer.fit(model, datamodule=dm)
+    # Lightning Module
+    model = XrayLightningDetection(net, cfg, optimizer, scheduler)
+
+    # Trainer  --------------------------------------------------------------------------
+    trainer = Trainer(
+        logger=wandb_logger,
+        log_every_n_steps=100,
+        max_epochs=cfg.train.epoch,
+        gpus=-1,
+        num_sanity_val_steps=0,
+        deterministic=True,
+        amp_level='O2',
+        amp_backend='apex'
+    )
+
+    # Train
+    trainer.fit(model, datamodule=dm)
 
     # Stop Logging
     wandb.finish()
