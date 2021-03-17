@@ -1,12 +1,10 @@
 import os, glob, hydra, cv2, shutil, time, datetime
-from dotenv import load_dotenv
 from omegaconf import DictConfig
-from comet_ml import Experiment
 import wandb
 
 import numpy as np
 import pandas as pd
-
+import torch
 from detectron2 import model_zoo
 from detectron2.engine import DefaultTrainer, DefaultPredictor
 from detectron2.config import get_cfg
@@ -26,25 +24,6 @@ def main(cfg: DictConfig):
     cur_dir = hydra.utils.get_original_cwd()
     os.chdir(cur_dir)
     seed_everything(cfg.data.seed)
-
-    load_dotenv('.env')
-    # comet_api_key = os.environ['COMET_ML_KEY']
-    # comet_project_name = os.environ['COMET_ML_PROJECT_NAME']
-    #
-    # # Logging
-    # # Comet_ml
-    # experiment = Experiment(api_key=comet_api_key,
-    #                         project_name=comet_project_name,
-    #                         auto_param_logging=False,
-    #                         auto_metric_logging=True,
-    #                         parse_args=False,
-    #                         auto_metric_step_rate=100)
-    #
-    # # Log Parameters
-    # experiment.log_parameters(dict(cfg.data))
-    # experiment.log_parameters(dict(cfg.train))
-    # experiment.log_parameters(dict(cfg.aug_kwargs_detection))
-    # experiment.log_parameters(dict(cfg.classification_kwargs))
 
     # wandb
     wandb.init(project='VinBigData-Detection')
@@ -155,7 +134,6 @@ def main(cfg: DictConfig):
 
     # Logging
     for model_path in glob.glob(os.path.join(cfg.data.output_dir, '*.pth')):
-        # experiment.log_model(name=model_path, file_or_folder=model_path)
         wandb.save(model_path)
 
     # Inference Setting  ------------------------------------------------------
@@ -178,24 +156,20 @@ def main(cfg: DictConfig):
         visualize(target_image_ids, data_dir, output_dir, predictor, score_th=th)
 
     # Metrics
-    try:
-        metrics_df = pd.read_json(os.path.join(output_dir, 'metrics.json'), orient="records", lines=True)
-        mdf = metrics_df.sort_values("iteration")
+    metrics_df = pd.read_json(os.path.join(output_dir, 'metrics.json'), orient="records", lines=True)
+    mdf = metrics_df.sort_values("iteration")
 
-        mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
-        for i in range(len(mdf3)):
-            row = mdf3.iloc[i]
-            # experiment.log_metric('AP40', row["bbox/AP75"] / 100., step=row["iteration"])
-            wandb.log({'AP40': row["bbox/AP75"] / 100.}, step=row['iteration'])
+    mdf3 = mdf[~mdf["bbox/AP75"].isna()].reset_index(drop=True)
+    for i in range(len(mdf3)):
+        row = mdf3.iloc[i]
+        wandb.log({'AP40': row["bbox/AP75"] / 100.})
 
-        best_score = mdf3["bbox/AP75"].max() / 100.
-        # experiment.log_parameter('Best-AP40-Score', best_score)
-        wandb.log({'Best-AP40-Score': best_score})
-    except:
-        pass
+    best_score = mdf3["bbox/AP75"].max() / 100.
+    wandb.log({'Best-AP40-Score': best_score})
 
     # Inference  ------------------------------------------------------
-    sub = get_submission(dataset_dicts, cfg, predictor)
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+    sub = get_submission(dataset_dicts, cfg, predictor, device)
 
     now = datetime.datetime.now() + datetime.timedelta(hours=9)
     now = now.strftime("%Y%m%d-%H%M%S")

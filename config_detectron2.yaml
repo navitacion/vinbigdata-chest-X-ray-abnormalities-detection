@@ -7,7 +7,7 @@ data:
   output_dir: ./detectron2_output/exp01
   img_size: &image_size 1024
   # Ref: https://github.com/facebookresearch/detectron2/blob/master/detectron2/model_zoo/model_zoo.py
-  backbone: COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml
+  backbone: COCO-Detection/faster_rcnn_R_101_FPN_3x.yaml
   use_class14: False
   seed: 42
   use_classification: True
@@ -20,11 +20,11 @@ classification_kwargs:
   weight_dir: ./weights/
   upper_th: 0.95
   lower_th: 0.08
-  cls_img_size: &class_image_size 512
+  cls_img_size: &class_image_size 384
 
 train:
   lr: 0.001
-  max_iter: 20000
+  max_iter: 40000
   num_workers: 4
   batch_size_per_image: 512
   ims_per_batch: 2

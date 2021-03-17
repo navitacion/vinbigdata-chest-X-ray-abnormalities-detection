@@ -120,7 +120,7 @@ def get_predict_det(d, predictor, data_dir):
     return image_id, sub_text
 
 
-def get_predict_classification(d, nets, cfg):
+def get_predict_classification(d, nets, cfg, device):
     # Classification Phase
     image_id = os.path.basename(d["file_name"]).split('.')[0]
     img_path = os.path.join(cfg.classification_kwargs.data_dir, 'test', f'{image_id}.png')
@@ -128,15 +128,21 @@ def get_predict_classification(d, nets, cfg):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     transform = ImageTransform_cls_test(cfg)
     img = transform(img, phase='test')
+    img = img.to(device)
 
-    out = [torch.sigmoid(m(img.unsqueeze(0))) for m in nets]
-    p1 = torch.cat(out).mean() # 1: class_id == 14  0: class_id != 14
+    outs = []
+    for m in nets:
+        out = torch.sigmoid(m(img.unsqueeze(0)))
+        outs.append(out.detach())
+        del out
+
+    p1 = torch.cat(outs).mean() # 1: class_id == 14  0: class_id != 14
 
     # Probability of class_id == 14
     return p1
 
 
-def get_submission(dataset_dicts, cfg, predictor):
+def get_submission(dataset_dicts, cfg, predictor, device):
     img_id_list = []
     sub_list = []
 
@@ -150,6 +156,7 @@ def get_submission(dataset_dicts, cfg, predictor):
             backbone = os.path.basename(weight_path).split('-')[0]
             net = Timm_model(backbone, out_dim=1)
             net.load_state_dict(torch.load(weight_path))
+            net = net.to(device)
             nets.append(net.eval())
 
     for d in tqdm(dataset_dicts, total=len(dataset_dicts)):
@@ -158,7 +165,7 @@ def get_submission(dataset_dicts, cfg, predictor):
             image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
         else:
             # Classification Phase
-            p1 = get_predict_classification(d, nets, cfg)
+            p1 = get_predict_classification(d, nets, cfg, device)
 
             if p1 > cfg.classification_kwargs.upper_th:
                 image_id = os.path.basename(d["file_name"]).split('.')[0]

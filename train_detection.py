@@ -5,7 +5,6 @@ from omegaconf import DictConfig
 import wandb
 from sklearn.model_selection import StratifiedKFold
 
-import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from pytorch_lightning import Trainer
@@ -27,22 +26,16 @@ def main(cfg: DictConfig):
     seed_everything(cfg.data.seed)
 
     load_dotenv('.env')
-    # wandb.login()
-    # wandb_logger = WandbLogger(project='VinBigData-Detection', reinit=True)
-    # wandb_logger.log_hyperparams(dict(cfg.data))
-    # wandb_logger.log_hyperparams(dict(cfg.train))
-    # wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
+    wandb.login()
+    wandb_logger = WandbLogger(project='VinBigData-Detection', reinit=True)
+    wandb_logger.log_hyperparams(dict(cfg.data))
+    wandb_logger.log_hyperparams(dict(cfg.train))
+    wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
 
     # Data Module  -------------------------------------------------------------------
     transform = ImageTransform(cfg, type='detection')
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
-    dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='detection', sample=None)
-    dm.prepare_data()
-    dm.setup()
-
-    dataloader = dm.train_dataloader()
-
-    image, target, image_id = next(iter(dataloader))
+    dm = ChestXrayDataModule(data_dir, cfg, transform, cv, data_type='detection', sample=False)
 
     # Model  -----------------------------------------------------------
     net = get_effdet_model(cfg, pretrained=True)
@@ -71,10 +64,10 @@ def main(cfg: DictConfig):
     # trainer.fit(model, datamodule=dm)
 
     # Stop Logging
-    # wandb.finish()
-    #
-    # for p in model.weight_paths:
-    #     os.remove(p)
+    wandb.finish()
+
+    for p in model.weight_paths:
+        os.remove(p)
 
 
 if __name__ == '__main__':

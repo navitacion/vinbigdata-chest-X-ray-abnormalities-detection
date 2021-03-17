@@ -9,9 +9,9 @@ import timm
 
 
 class Timm_model(nn.Module):
-    def __init__(self, model_name, pretrained=True, out_dim=5, features_only=False):
+    def __init__(self, model_name, pretrained=True, out_dim=5):
         super(Timm_model, self).__init__()
-        self.base = create_model(model_name, pretrained=pretrained, features_only=features_only)
+        self.base = create_model(model_name, pretrained=pretrained)
 
         if 'efficientnet' in model_name:
             self.base.classifier = nn.Linear(in_features=self.base.classifier.in_features, out_features=out_dim)
@@ -70,13 +70,27 @@ def get_original_faster_RCNN(num_classes=14,  pretrained=True):
     return model
 
 
+# EfficientDet
+# Ref: https://www.kaggle.com/sreevishnudamodaran/effdet-pytorch-cutmix-mixup-kfold-cosanneal/notebook
+from effdet import create_model, unwrap_bench, create_loader, create_model_from_config, get_efficientdet_config
+
+def get_effdet_model(cfg, pretrained=True):
+
+    base_config = get_efficientdet_config(cfg.train.backbone)
+    base_config.image_size = (cfg.data.img_size, cfg.data.img_size)
+    model = create_model_from_config(base_config, bench_task='train', bench_labeler=True,
+                                     num_classes=cfg.data.num_classes,
+                                     pretrained=pretrained)
+
+    return model
+
 
 if __name__ == '__main__':
-    net = create_model('dm_nfnet_f4', pretrained=False)
+    net = create_model('vit_deit_base_patch16_384', pretrained=False)
 
     print(net)
 
-    net = Timm_model("dm_nfnet_f4", pretrained=False)
+    net = Timm_model("vit_deit_base_patch16_384", pretrained=False)
     print(net)
 
     # Print Timm Models
