@@ -60,11 +60,14 @@ def main(cfg: DictConfig):
     backbone = cfg.data.backbone
     use_class14 = cfg.data.use_class14
 
+    if os.path.exists(output_dir):
+        shutil.rmtree(output_dir)
+
     if use_class14:
         class_name_dict.update({14: 'No finding'})
 
     # Register Dataset  --------------------------------------------------
-    anno_df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
+    anno_df = pd.read_csv(os.path.join(data_dir, 'train_wbf_th0.7.csv'))
 
     if cfg.data.use_class14:
         pass
@@ -79,11 +82,12 @@ def main(cfg: DictConfig):
         anno_df = anno_df.head(100)
 
     # Split train, valid data - random
-    if cfg.data.split_method == 'valid20':
+    if 'valid' in cfg.data.split_method:
+        split_rate = float(cfg.data.split_method.split('_')[1]) / 100
         unique_image_ids = anno_df['image_id'].values
         unique_image_ids = np.random.RandomState(cfg.data.seed).permutation(unique_image_ids)
-        train_image_ids = unique_image_ids[:int(len(unique_image_ids) * 0.8)]
-        valid_image_ids = unique_image_ids[int(len(unique_image_ids) * 0.8):]
+        train_image_ids = unique_image_ids[:int(len(unique_image_ids) * (1 - split_rate))]
+        valid_image_ids = unique_image_ids[int(len(unique_image_ids) * (1 - split_rate)):]
         DatasetCatalog.register("xray_valid", lambda d='valid': get_xray_dict(anno_df, data_dir, cfg, valid_image_ids))
         MetadataCatalog.get("xray_valid").set(thing_classes=list(class_name_dict.values()))
 
@@ -100,7 +104,7 @@ def main(cfg: DictConfig):
     detectron2_cfg.aug_kwargs = CN(rep_aug_kwargs)
     detectron2_cfg.merge_from_file(model_zoo.get_config_file(backbone))
     detectron2_cfg.DATASETS.TRAIN = ("xray_train",)
-    if cfg.data.split_method == 'valid20':
+    if 'valid' in cfg.data.split_method:
         detectron2_cfg.DATASETS.TEST = ("xray_valid",)
         detectron2_cfg.TEST.EVAL_PERIOD = cfg.train.max_iter // 10
     else:
@@ -179,10 +183,7 @@ def main(cfg: DictConfig):
     wandb.save(os.path.join('./submission', filename))
     time.sleep(30)
 
-    # shutil.rmtree(output_dir)
-
-    # wandb.finish()
-    # experiment.end()
+    wandb.finish()
 
 if __name__ == '__main__':
     main()

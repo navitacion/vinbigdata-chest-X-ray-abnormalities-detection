@@ -48,6 +48,9 @@ class ChestXrayDataset(Dataset):
             target['boxes'] = boxes
             target['labels'] = torch.tensor(labels)
             target['image_id'] = torch.tensor([idx])
+            target['img_size'] = torch.tensor([self.cfg.data.img_size, self.cfg.data.img_size], dtype=torch.float)
+            target['img_scale'] = torch.tensor([1.0], dtype=torch.float)
+
 
             if self.transform:
                 for i in range(10):
@@ -121,8 +124,8 @@ class ChestXrayDataset(Dataset):
                                      p=1.0,
                                      bbox_params=A.BboxParams(
                                          format='pascal_voc',
-                                         min_area=0.1,
-                                         min_visibility=0.1,
+                                         min_area=0.0,
+                                         min_visibility=0.0,
                                          label_fields=['labels'])
                                      )
 

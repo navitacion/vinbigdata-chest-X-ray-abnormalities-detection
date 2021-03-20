@@ -11,3 +11,4 @@ weights/*
 submission/*
 wandb/*
 VinBigData-Classification/*
+VinBigData-Detection/*

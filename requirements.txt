@@ -13,4 +13,4 @@ opencv-python==4.4.0.46
 timm==0.4.5
 comet_ml==3.4.0
 wandb==0.10.22
-effdet==0.2.3
+ensemble-boxes

@@ -5,8 +5,7 @@ from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torchvision.models.detection.rpn import AnchorGenerator
 from timm import create_model
-import timm
-from effdet import create_model, create_model_from_config, get_efficientdet_config
+from effdet import create_model_from_config, get_efficientdet_config
 
 
 class Timm_model(nn.Module):
@@ -74,7 +73,6 @@ def get_original_faster_RCNN(num_classes=14,  pretrained=True):
 # EfficientDet
 # Ref: https://www.kaggle.com/sreevishnudamodaran/effdet-pytorch-cutmix-mixup-kfold-cosanneal/notebook
 def get_effdet_model(cfg, pretrained=True, task='train'):
-
     base_config = get_efficientdet_config(cfg.train.backbone_det)
     base_config.image_size = (cfg.data.img_size, cfg.data.img_size)
     model = create_model_from_config(base_config, bench_task=task, bench_labeler=True,

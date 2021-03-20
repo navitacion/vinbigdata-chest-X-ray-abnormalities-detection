@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from omegaconf import DictConfig
 import wandb
 from sklearn.model_selection import StratifiedKFold
-
+import torch
 from torch import nn, optim
 from torch.optim import lr_scheduler
 from pytorch_lightning import Trainer
@@ -27,10 +27,6 @@ def main(cfg: DictConfig):
 
     load_dotenv('.env')
     wandb.login()
-    wandb_logger = WandbLogger(project='VinBigData-Detection', reinit=True)
-    wandb_logger.log_hyperparams(dict(cfg.data))
-    wandb_logger.log_hyperparams(dict(cfg.train))
-    wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
 
     # Data Module  -------------------------------------------------------------------
     transform = ImageTransform(cfg, type='detection')
@@ -43,7 +39,13 @@ def main(cfg: DictConfig):
     # Optimizer, Scheduler  -----------------------------------------------------------
     optimizer = optim.Adam(net.parameters(), lr=cfg.train.lr)
     scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
+
+
     # Lightning Module
+    wandb_logger = WandbLogger(project='VinBigData-Detection', reinit=True)
+    wandb_logger.log_hyperparams(dict(cfg.data))
+    wandb_logger.log_hyperparams(dict(cfg.train))
+    wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
     model = XrayLightningDetection(net, cfg, optimizer, scheduler)
 
     # Trainer  --------------------------------------------------------------------------
@@ -53,9 +55,7 @@ def main(cfg: DictConfig):
         max_epochs=cfg.train.epoch,
         gpus=-1,
         num_sanity_val_steps=0,
-        deterministic=True,
-        amp_level='O2',
-        amp_backend='apex'
+        # deterministic=True,
     )
 
     # Train

@@ -114,7 +114,6 @@ class ChestXrayDataModule(pl.LightningDataModule):
                           pin_memory=True,
                           num_workers=self.cfg.train.num_workers,
                           shuffle=True,
-                          drop_last=True,
                           collate_fn=self.collate_fn)
 
     def val_dataloader(self):
@@ -176,6 +175,8 @@ class XrayLightningClassification(pl.LightningModule):
         out = self.forward(inp)
         label = label.reshape(out.size())
         loss = self.criterion(out, label)
+
+        del inp
 
         return loss, label, torch.sigmoid(out), image_id
 
@@ -271,6 +272,7 @@ class XrayLightningDetection(pl.LightningModule):
         return output
 
     def training_step(self, batch, batch_idx):
+        self.net.train()
         images, targets, image_id = batch
         images = torch.stack(images).float()
 
@@ -290,27 +292,32 @@ class XrayLightningDetection(pl.LightningModule):
         return {'loss': output['loss']}
 
     def validation_step(self, batch, batch_idx):
-        images, targets, image_id = batch
-        images = torch.stack(images).float()
+        self.net.train()
+        with torch.no_grad():
+            images, targets, image_id = batch
+            images = torch.stack(images).float()
 
-        target_res = {}
-        boxes = [target['boxes'].float() for target in targets]
-        labels = [target['labels'].float() for target in targets]
-        target_res['bbox'] = boxes
-        target_res['cls'] = labels
-        target_res["img_scale"] = torch.tensor([1.0] * self.cfg.train.batch_size, dtype=torch.float)
-        target_res["img_size"] = torch.tensor([images[0].shape[-2:]] * self.cfg.train.batch_size, dtype=torch.float)
+            target_res = {}
+            boxes = [target['boxes'].float() for target in targets]
+            labels = [target['labels'].float() for target in targets]
+            img_sizes = [target['img_size'].float() for target in targets]
+            img_scale = [target['img_scale'].float() for target in targets]
 
-        output = self.forward(images, target_res)
+            target_res['bbox'] = boxes
+            target_res['cls'] = labels
+            target_res["img_scale"] = torch.cat(img_scale)
+            target_res["img_size"] = torch.stack(img_sizes)
 
-        predictions = self.modify_detections(output['detections'], images)
+            output = self.forward(images, target_res)
 
-        # logging
-        self.log('val/loss', output['loss'], on_epoch=True)
-        self.log('val/class_loss', output['class_loss'], on_epoch=True)
-        self.log('val/box_loss', output['box_loss'], on_epoch=True)
+            # predictions = self.modify_detections(output['detections'], images)
 
-        return {'val_loss': output['loss'], 'predictions': predictions, 'image_id': image_id}
+            # logging
+            self.log('val/loss', output['loss'], on_epoch=True)
+            self.log('val/class_loss', output['class_loss'], on_epoch=True)
+            self.log('val/box_loss', output['box_loss'], on_epoch=True)
+
+        return {'val_loss': output['loss'], 'image_id': image_id}
 
 
     def validation_epoch_end(self, outputs):
@@ -318,7 +325,7 @@ class XrayLightningDetection(pl.LightningModule):
 
         # Save Weights
         filename = '{}-seed_{}_fold_{}_ims_{}_epoch_{}_loss_{:.3f}.pth'.format(
-            self.cfg.train.backbone, self.cfg.data.seed, self.cfg.train.fold,
+            self.cfg.train.backbone_det, self.cfg.data.seed, self.cfg.train.fold,
             self.cfg.data.img_size, self.current_epoch, avg_loss.item()
         )
         torch.save(self.net.state_dict(), filename)

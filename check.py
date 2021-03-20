@@ -34,6 +34,8 @@ def main(cfg: DictConfig):
     # wandb_logger.log_hyperparams(dict(cfg.train))
     # wandb_logger.log_hyperparams(dict(cfg.aug_kwargs_classification))
 
+
+
     # Data Module  -------------------------------------------------------------------
     transform = ImageTransform(cfg, type='detection')
     cv = StratifiedKFold(n_splits=cfg.data.n_splits)
@@ -46,51 +48,60 @@ def main(cfg: DictConfig):
     # Model  -----------------------------------------------------------
     net = get_effdet_model(cfg, pretrained=False, task='train')
 
-    images, targets, image_id = next(iter(dataloader))
+    for j, (images, targets, image_id) in enumerate(dataloader):
 
-    images = torch.stack(images).float()
+        net.train()
+        net = net.cuda()
+        images = torch.stack(images).float().cuda()
 
-    target_res = {}
-    boxes = [target['boxes'].float() for target in targets]
-    labels = [target['labels'].float() for target in targets]
-    target_res['bbox'] = boxes
-    target_res['cls'] = labels
+        target_res = {}
+        boxes = [target['boxes'].float().cuda() for target in targets]
+        labels = [target['labels'].float().cuda() for target in targets]
+        target_res['bbox'] = boxes
+        target_res['cls'] = labels
 
-    output = net(images, target_res)
-    loss = output['loss']
+        output = net(images, target_res)
+        loss = output['loss']
 
-    net.eval()
-    target_res = {}
-    boxes = [target['boxes'].float() for target in targets]
-    labels = [target['labels'].float() for target in targets]
-    target_res['bbox'] = boxes
-    target_res['cls'] = labels
-    target_res["img_scale"] = torch.tensor([1.0] * cfg.train.batch_size, dtype=torch.float)
-    target_res["img_size"] = torch.tensor([images[0].shape[-2:]] * cfg.train.batch_size, dtype=torch.float)
+        net.eval()
+        target_res = {}
+        boxes = [target['boxes'].float().cuda() for target in targets]
+        labels = [target['labels'].float().cuda() for target in targets]
+        target_res['bbox'] = boxes
+        target_res['cls'] = labels
+        target_res["img_scale"] = torch.tensor([1.0] * cfg.train.batch_size, dtype=torch.float).cuda()
+        target_res["img_size"] = torch.tensor([images[0].shape[-2:]] * cfg.train.batch_size, dtype=torch.float).cuda()
 
-    output = net(images, target_res)
-    loss = output['loss']
-    det = output['detections']
-    predictions = []
-    for i in range(images.shape[0]):
-        boxes = det[i].detach().cpu().numpy()[:, :4]
-        scores = det[i].detach().cpu().numpy()[:, 4]
-        labels = det[i].detach().cpu().numpy()[:, 5]
-        indexes = np.where(scores > 0)[0]
-        boxes = boxes[indexes]
-        boxes[:, 2] = boxes[:, 2] + boxes[:, 0]
-        boxes[:, 3] = boxes[:, 3] + boxes[:, 1]
-        predictions.append({
-            'boxes': boxes[indexes],
-            'scores': scores[indexes],
-            'labels': labels[indexes]
-        })
+        output = net(images, target_res)
+        loss = output['loss']
+        det = output['detections']
+        predictions = []
+        for i in range(images.shape[0]):
+            boxes = det[i].detach().cpu().numpy()[:, :4]
+            scores = det[i].detach().cpu().numpy()[:, 4]
+            labels = det[i].detach().cpu().numpy()[:, 5]
+            indexes = np.where(scores > 0)[0]
+            boxes = boxes[indexes]
+            boxes[:, 2] = boxes[:, 2] + boxes[:, 0]
+            boxes[:, 3] = boxes[:, 3] + boxes[:, 1]
+            predictions.append({
+                'boxes': boxes[indexes],
+                'scores': scores[indexes],
+                'labels': labels[indexes]
+            })
+
+        print(predictions)
+
+        if j == 2:
+            break
+
+
 
     # Optimizer, Scheduler  -----------------------------------------------------------
-    param_optimizer = list(net.named_parameters())
-    no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
-    optimizer = optim.Adam(net.parameters(), lr=cfg.train.lr)
-    scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
+    # param_optimizer = list(net.named_parameters())
+    # no_decay = ['bias', 'LayerNorm.bias', 'LayerNorm.weight']
+    # optimizer = optim.Adam(net.parameters(), lr=cfg.train.lr)
+    # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=cfg.train.epoch, eta_min=0)
     # # Lightning Module
     # model = XrayLightningClassification(net, cfg, criterion, optimizer, scheduler)
     #

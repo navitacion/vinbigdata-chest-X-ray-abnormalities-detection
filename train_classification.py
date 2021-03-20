@@ -56,7 +56,7 @@ def main(cfg: DictConfig):
         max_epochs=cfg.train.epoch,
         gpus=-1,
         num_sanity_val_steps=0,
-        deterministic=True,
+        # deterministic=True,
         amp_level='O2',
         amp_backend='apex'
     )

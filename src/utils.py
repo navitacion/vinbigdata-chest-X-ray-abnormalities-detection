@@ -34,8 +34,8 @@ def seed_everything(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = True
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = True
 
 
 def display_bbox_image(img, bboxes, labels, ax):
@@ -107,6 +107,10 @@ def visualize(target_image_ids, data_dir, output_dir, predictor, score_th=0.0):
         filename = os.path.join(output_dir, f'result_{target_image_id}_th_{score_th}.jpg')
         fig.savefig(filename)
         wandb.save(filename)
+
+        im = plt.imread(filename)
+        wandb.log({"img": [wandb.Image(im, caption=f'result_{target_image_id}_th_{score_th}.jpg')]})
+        del im
 
         plt.clf()
         plt.close()

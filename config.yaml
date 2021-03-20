@@ -17,8 +17,8 @@ train:
   lr: 1e-4
   epoch: 10
   fold: 0
-  batch_size: 4
-  num_workers: 8
+  batch_size: 6
+  num_workers: 16
   weight_decay: 1e-5
   backbone: tf_efficientnet_b4_ns
   backbone_det: tf_efficientdet_d1
