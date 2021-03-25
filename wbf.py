@@ -15,7 +15,7 @@ sigma = 0.1
 # ===============================
 
 # Loading the train DF
-data_dir = './input/resize_1024'
+data_dir = './input/resize_2048'
 df = pd.read_csv(os.path.join(data_dir, 'train.csv'))
 df.fillna(0, inplace=True)
 df.loc[df["class_id"] == 14, ['x_max', 'y_max']] = 1.0

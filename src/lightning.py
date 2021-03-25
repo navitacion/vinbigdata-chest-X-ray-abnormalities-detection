@@ -213,6 +213,8 @@ class XrayLightningClassification(pl.LightningModule):
         wandb.save(filename)
         self.weight_paths.append(filename)
 
+        del avg_loss, labels, logits
+
         return None
 
 

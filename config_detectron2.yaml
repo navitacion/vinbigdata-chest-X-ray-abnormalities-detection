@@ -13,10 +13,10 @@ data:
   use_classification: True
   score_th: 0.0
   rad_id: all  # Default: all  ex. R9, R10, R11   Set List
-  split_method: valid_20  # valid_20 or all_train
+  split_method: valid_10  # valid_20 or all_train
 
 classification_kwargs:
-  data_dir: ./input/resize_1024
+  data_dir_cls: ./input/resize_1024
   weight_dir: ./weights/
   upper_th: 0.985
   lower_th: 0.08
@@ -24,8 +24,8 @@ classification_kwargs:
 
 train:
   lr: 0.001
-  max_iter: 20000
-  num_workers: 4
+  max_iter: 40000
+  num_workers: 16
   batch_size_per_image: 512
   ims_per_batch: 2
 

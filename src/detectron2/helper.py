@@ -2,6 +2,8 @@ import os, cv2, glob
 import pandas as pd
 from tqdm import tqdm
 import wandb
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 import torch
 from detectron2.structures import BoxMode
@@ -120,23 +122,18 @@ def get_predict_det(d, predictor, data_dir):
     return image_id, sub_text
 
 
-def get_predict_classification(d, nets, cfg, device):
+def get_predict_classification(d, net, cfg, transform, device):
     # Classification Phase
     image_id = os.path.basename(d["file_name"]).split('.')[0]
-    img_path = os.path.join(cfg.classification_kwargs.data_dir, 'test', f'{image_id}.png')
+    img_path = os.path.join(cfg.classification_kwargs.data_dir_cls, 'test', f'{image_id}.png')
     img = cv2.imread(img_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-    transform = ImageTransform_cls_test(cfg)
-    img = transform(img, phase='test')
+    # transform = ImageTransform_cls_test(cfg)
+    img = transform(image=img)['image']
     img = img.to(device)
 
-    outs = []
-    for m in nets:
-        out = torch.sigmoid(m(img.unsqueeze(0)))
-        outs.append(out.detach())
-        del out
-
-    p1 = torch.cat(outs).mean() # 1: class_id == 14  0: class_id != 14
+    p1 = torch.sigmoid(net(img.unsqueeze(0)))
+    p1 = p1.detach().cpu().item()
 
     # Probability of class_id == 14
     return p1
@@ -148,6 +145,7 @@ def get_submission(dataset_dicts, cfg, predictor, device):
 
     # Classification Model Setting
     nets = []
+    transforms = []
     if cfg.data.use_classification:
         # experiment.log_asset_folder(cfg.classification_kwargs.weight_dir)
         wandb.save(os.path.join(cfg.classification_kwargs.weight_dir, '*.pth'))
@@ -159,24 +157,34 @@ def get_submission(dataset_dicts, cfg, predictor, device):
             net = net.to(device)
             nets.append(net.eval())
 
-    for d in tqdm(dataset_dicts, total=len(dataset_dicts)):
-        if len(nets) == 0:
-            # Detection Phase Only
-            image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
-        else:
-            # Classification Phase
-            p1 = get_predict_classification(d, nets, cfg, device)
+            # モデルの入力に合わせた画像サイズで変換
+            img_size = int(weight_path.split('ims_')[1].split('_')[0])
+            transform = A.Compose([
+                A.Resize(img_size, img_size, p=1),
+                A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                ToTensorV2()
+            ])
+            transforms.append(transform)
 
-            if p1 > cfg.classification_kwargs.upper_th:
-                image_id = os.path.basename(d["file_name"]).split('.')[0]
-                sub_text = '14 1 0 0 1 1'
-            elif p1 > cfg.classification_kwargs.lower_th and p1 < cfg.classification_kwargs.upper_th:
-                # Det Predict and add class14
-                image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
-                sub_text += f'14 {p1} 0 0 1 1'
-            else:
-                # Only Det
-                image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
+    for d in tqdm(dataset_dicts, total=len(dataset_dicts)):
+        # Classification Phase
+        p1 = 0
+        for net, transform in zip(nets, transforms):
+            p1 += get_predict_classification(d, net, cfg, transform, device)
+
+        p1 /= len(nets)
+
+        if p1 > cfg.classification_kwargs.upper_th:
+            image_id = os.path.basename(d["file_name"]).split('.')[0]
+            sub_text = '14 1 0 0 1 1'
+        elif p1 > cfg.classification_kwargs.lower_th and p1 < cfg.classification_kwargs.upper_th:
+            # Det Predict and add class14
+            image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
+            sub_text += f'14 {p1} 0 0 1 1'
+        else:
+            # Only Det
+            image_id, sub_text = get_predict_det(d, predictor, cfg.data.data_dir)
+            sub_text += f'14 0 0 0 1 1'  # https://www.kaggle.com/prashantkikani/vinbigdata-post-processing
 
         img_id_list.append(image_id)
         sub_list.append(sub_text)
