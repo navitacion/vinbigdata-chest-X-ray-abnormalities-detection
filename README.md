@@ -95,7 +95,7 @@ Refer from [this code](https://www.kaggle.com/c/vinbigdata-chest-xray-abnormalit
 In this case, we used a threshold value of "iou_thr = 0.7".
 
 
-### train.detection.py
+### train_detection.py
 
 Script to run efficientdet with Pytorch Lightning.
 
