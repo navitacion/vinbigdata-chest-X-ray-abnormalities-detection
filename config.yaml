@@ -6,7 +6,7 @@ data:
   exp_name: test
   data_dir: ./input/resize_1024
   seed: 0
-  img_size: &image_size 512
+  img_size: &image_size 256
   n_splits: 5
   sub_th: 0.2
   rad_id: all  # Default: all  ex. R9, R10, R11   Set List
@@ -17,7 +17,7 @@ train:
   lr: 1e-4
   epoch: 10
   fold: 0
-  batch_size: 4
+  batch_size: 20
   num_workers: 16
   weight_decay: 1e-5
   backbone: tf_efficientnet_b4_ns
