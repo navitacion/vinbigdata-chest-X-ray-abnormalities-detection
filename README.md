@@ -20,7 +20,7 @@ Kaggle Competition Repogitory
 ## Result
 
 - Private Score: 0.236
-- Rank: 204th (16%)
+- Rank: 200th (16%)
 
 
 ## Getting Started
